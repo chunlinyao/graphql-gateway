@@ -234,8 +234,8 @@
   - Next Role: Reviewer — 请确认 `/schema` 输出格式与测试覆盖符合验收标准。
   - Notes/Follow-ups:
 
-- [ ] M4.2 introspection 查询走本地 (status: todo)
-  - Owner:
+- [ ] M4.2 introspection 查询走本地 (status: review)
+  - Owner: codex @ 2025-10-29 09:40 UTC
   - Context:
     - 客户端会发 GraphQL introspection 查询（`__schema`, `__type`）。
     - 对这种请求，网关不应该往后端打请求，而是用合并后的公共 schema 来回答。
@@ -247,11 +247,18 @@
     - 检测“是否是纯 introspection”。
     - 构造 introspection 响应：可用本地的合并 schema 结构来回答。
   - What Changed:
+    - 新增 `GatewayGraphQLFactory` 以基于合并 SDL 构建 GraphQL Java 实例，用于回答本地 introspection 查询。
+    - 新增 `IntrospectionQueryDetector` 判断请求是否仅包含 `__schema`/`__type` 等 introspection 字段。
+    - `POST /graphql` 路由支持 introspection：本地执行并返回结果，非 introspection 请求暂返回 501。
+    - 增加 `ApplicationGraphQLIntrospectionTest` 验证 introspection 与非 introspection 请求的行为。
   - How to Run/Test:
-    - `POST /graphql` with `{ query: "{ __schema { types { name } } }" }` 返回 200 并包含类型列表。
+    - `./gradlew test`
+    - `curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' -d '{"query":"{ __schema { queryType { name } } }"}'`
   - Known Limits:
+    - 若合并 SDL 为空或无法被 GraphQL Java 解析，将返回 503，后续可改进以生成最小可用 schema。
+    - 非 introspection 请求仍未实现路由（返回 501），待 M5 系列任务处理。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认 introspection 检测逻辑、GraphQL 执行器构造与 HTTP 行为符合验收标准。
   - Notes/Follow-ups:
 
 ---
