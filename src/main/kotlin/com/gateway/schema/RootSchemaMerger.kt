@@ -1,6 +1,7 @@
 package com.gateway.schema
 
 import com.gateway.config.UpstreamService
+import com.gateway.introspection.GraphQLFieldDefinition
 import com.gateway.introspection.UpstreamSchema
 import org.slf4j.LoggerFactory
 
@@ -10,6 +11,7 @@ import org.slf4j.LoggerFactory
 data class RoutedField(
     val fieldName: String,
     val service: UpstreamService,
+    val definition: GraphQLFieldDefinition,
 )
 
 /**
@@ -44,10 +46,17 @@ class RootSchemaMerger {
         val mutationFields = LinkedHashMap<String, RoutedField>()
 
         sortedSchemas.forEach { schema ->
+            val queryDefinition = schema.queryTypeName?.let { typeName ->
+                schema.typeDefinitions[typeName]
+            }
             schema.queryFieldNames.forEach { fieldName ->
                 val existing = queryFields[fieldName]
+                val fieldDefinition = queryDefinition?.fields?.find { it.name == fieldName }
+                    ?: throw IllegalStateException(
+                        "Missing field definition for query field $fieldName on service ${schema.service.name}",
+                    )
                 if (existing == null) {
-                    queryFields[fieldName] = RoutedField(fieldName, schema.service)
+                    queryFields[fieldName] = RoutedField(fieldName, schema.service, fieldDefinition)
                 } else if (existing.service != schema.service) {
                     logger.info(
                         "Query field {} from service {} skipped due to existing owner {}",
@@ -58,10 +67,17 @@ class RootSchemaMerger {
                 }
             }
 
+            val mutationDefinition = schema.mutationTypeName?.let { typeName ->
+                schema.typeDefinitions[typeName]
+            }
             schema.mutationFieldNames.forEach { fieldName ->
                 val existing = mutationFields[fieldName]
+                val fieldDefinition = mutationDefinition?.fields?.find { it.name == fieldName }
+                    ?: throw IllegalStateException(
+                        "Missing field definition for mutation field $fieldName on service ${schema.service.name}",
+                    )
                 if (existing == null) {
-                    mutationFields[fieldName] = RoutedField(fieldName, schema.service)
+                    mutationFields[fieldName] = RoutedField(fieldName, schema.service, fieldDefinition)
                 } else if (existing.service != schema.service) {
                     logger.info(
                         "Mutation field {} from service {} skipped due to existing owner {}",

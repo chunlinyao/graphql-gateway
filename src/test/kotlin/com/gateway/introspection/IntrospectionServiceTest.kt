@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockWebServer
 class IntrospectionServiceTest {
 
     private val service = IntrospectionService()
+    private val typeNamePattern = Regex("""\"typeName\"\s*:\s*\"([\w]+)\"""")
 
     @Test
     fun `successful introspection returns query and mutation fields`() {
@@ -25,27 +26,13 @@ class IntrospectionServiceTest {
                           "data": {
                             "__schema": {
                               "queryType": { "name": "Query" },
-                              "mutationType": { "name": "Mutation" }
-                            }
-                          }
-                        }
-                        """.trimIndent(),
-                    ),
-            )
-
-            // __type for Query
-            server.enqueue(
-                MockResponse()
-                    .setResponseCode(200)
-                    .setHeader("Content-Type", "application/json")
-                    .setBody(
-                        """
-                        {
-                          "data": {
-                            "__type": {
-                              "fields": [
-                                { "name": "students" },
-                                { "name": "student" }
+                              "mutationType": { "name": "Mutation" },
+                              "types": [
+                                { "kind": "OBJECT", "name": "Query" },
+                                { "kind": "OBJECT", "name": "Mutation" },
+                                { "kind": "OBJECT", "name": "Student" },
+                                { "kind": "INPUT_OBJECT", "name": "StudentFilter" },
+                                { "kind": "SCALAR", "name": "String" }
                               ]
                             }
                           }
@@ -53,8 +40,6 @@ class IntrospectionServiceTest {
                         """.trimIndent(),
                     ),
             )
-
-            // __type for Mutation
             server.enqueue(
                 MockResponse()
                     .setResponseCode(200)
@@ -64,8 +49,153 @@ class IntrospectionServiceTest {
                         {
                           "data": {
                             "__type": {
+                              "kind": "OBJECT",
+                              "name": "Query",
                               "fields": [
-                                { "name": "createStudent" }
+                                {
+                                  "name": "students",
+                                  "type": {
+                                    "kind": "LIST",
+                                    "name": null,
+                                    "ofType": {
+                                      "kind": "OBJECT",
+                                      "name": "Student",
+                                      "ofType": null
+                                    }
+                                  },
+                                  "args": [
+                                    {
+                                      "name": "filter",
+                                      "type": {
+                                        "kind": "INPUT_OBJECT",
+                                        "name": "StudentFilter",
+                                        "ofType": null
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "student",
+                                  "type": {
+                                    "kind": "OBJECT",
+                                    "name": "Student",
+                                    "ofType": null
+                                  },
+                                  "args": [
+                                    {
+                                      "name": "id",
+                                      "type": {
+                                        "kind": "NON_NULL",
+                                        "name": null,
+                                        "ofType": {
+                                          "kind": "SCALAR",
+                                          "name": "ID",
+                                          "ofType": null
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ],
+                              "inputFields": []
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """
+                        {
+                          "data": {
+                            "__type": {
+                              "kind": "OBJECT",
+                              "name": "Mutation",
+                              "fields": [
+                                {
+                                  "name": "createStudent",
+                                  "type": {
+                                    "kind": "OBJECT",
+                                    "name": "Student",
+                                    "ofType": null
+                                  },
+                                  "args": []
+                                }
+                              ],
+                              "inputFields": []
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """
+                        {
+                          "data": {
+                            "__type": {
+                              "kind": "OBJECT",
+                              "name": "Student",
+                              "fields": [
+                                {
+                                  "name": "id",
+                                  "type": {
+                                    "kind": "NON_NULL",
+                                    "name": null,
+                                    "ofType": {
+                                      "kind": "SCALAR",
+                                      "name": "ID",
+                                      "ofType": null
+                                    }
+                                  },
+                                  "args": []
+                                },
+                                {
+                                  "name": "name",
+                                  "type": {
+                                    "kind": "SCALAR",
+                                    "name": "String",
+                                    "ofType": null
+                                  },
+                                  "args": []
+                                }
+                              ],
+                              "inputFields": []
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """
+                        {
+                          "data": {
+                            "__type": {
+                              "kind": "INPUT_OBJECT",
+                              "name": "StudentFilter",
+                              "fields": [],
+                              "inputFields": [
+                                {
+                                  "name": "status",
+                                  "type": {
+                                    "kind": "SCALAR",
+                                    "name": "String",
+                                    "ofType": null
+                                  }
+                                }
                               ]
                             }
                           }
@@ -78,22 +208,38 @@ class IntrospectionServiceTest {
             val upstream = UpstreamService("Test", server.url("/graphql").toString(), 0)
             val schema = service.introspect(upstream)
 
-            val recordedRequest1 = server.takeRequest()
-            assertEquals("POST", recordedRequest1.method)
-            assertEquals("/graphql", recordedRequest1.path)
+            val overviewRequest = server.takeRequest()
+            assertEquals("POST", overviewRequest.method)
+            assertEquals("/graphql", overviewRequest.path)
+            val overviewBody = overviewRequest.body.readUtf8()
+            assertTrue(overviewBody.contains("GatewaySchemaOverview"))
 
-            val recordedRequest2 = server.takeRequest()
-            assertEquals("POST", recordedRequest2.method)
-            assertEquals("/graphql", recordedRequest2.path)
-
-            val recordedRequest3 = server.takeRequest()
-            assertEquals("POST", recordedRequest3.method)
-            assertEquals("/graphql", recordedRequest3.path)
+            val typeRequestNames = mutableListOf<String>()
+            repeat(4) {
+                val request = server.takeRequest()
+                assertEquals("POST", request.method)
+                val body = request.body.readUtf8()
+                assertTrue(body.contains("GatewayTypeDetails"))
+                val typeName = typeNamePattern.find(body)?.groupValues?.get(1)
+                if (typeName != null) {
+                    typeRequestNames += typeName
+                }
+            }
+            assertEquals(setOf("Query", "Mutation", "Student", "StudentFilter"), typeRequestNames.toSet())
 
             assertEquals("Query", schema.queryTypeName)
             assertEquals(listOf("students", "student"), schema.queryFieldNames)
             assertEquals("Mutation", schema.mutationTypeName)
             assertEquals(listOf("createStudent"), schema.mutationFieldNames)
+
+            val queryDefinition = schema.typeDefinitions["Query"]
+            assertEquals(2, queryDefinition?.fields?.size)
+            val mutationDefinition = schema.typeDefinitions["Mutation"]
+            assertEquals(1, mutationDefinition?.fields?.size)
+            val studentType = schema.typeDefinitions["Student"]
+            assertEquals(2, studentType?.fields?.size)
+            val filterType = schema.typeDefinitions["StudentFilter"]
+            assertEquals(1, filterType?.inputFields?.size)
         }
     }
 

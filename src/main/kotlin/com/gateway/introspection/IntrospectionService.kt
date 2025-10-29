@@ -20,14 +20,74 @@ private val jsonMapper: ObjectMapper = ObjectMapper()
     .registerModule(KotlinModule.Builder().build())
     .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 
-private const val INTROSPECTION_QUERY = """
-    query GatewayIntrospectionQuery {
+private const val SCHEMA_OVERVIEW_QUERY = """
+    query GatewaySchemaOverview {
       __schema {
         queryType {
           name
         }
         mutationType {
           name
+        }
+        types {
+          kind
+          name
+        }
+      }
+    }
+"""
+
+private const val TYPE_DETAILS_QUERY = """
+    query GatewayTypeDetails(${ '$' }typeName: String!) {
+      __type(name: ${ '$' }typeName) {
+        kind
+        name
+        fields(includeDeprecated: true) {
+          name
+          args {
+            name
+            type {
+              ...GatewayTypeRef
+            }
+          }
+          type {
+            ...GatewayTypeRef
+          }
+        }
+        inputFields {
+          name
+          type {
+            ...GatewayTypeRef
+          }
+        }
+      }
+    }
+
+    fragment GatewayTypeRef on __Type {
+      kind
+      name
+      ofType {
+        kind
+        name
+        ofType {
+          kind
+          name
+          ofType {
+            kind
+            name
+            ofType {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -74,7 +134,92 @@ class IntrospectionService(
     }
 
     fun introspect(upstream: UpstreamService): UpstreamSchema {
-        val requestBody = jsonMapper.writeValueAsString(mapOf("query" to INTROSPECTION_QUERY.trimIndent()))
+        val schemaOverview = fetchSchemaOverview(upstream)
+        val queryTypeName = schemaOverview.queryType?.name
+        val mutationTypeName = schemaOverview.mutationType?.name
+
+        if (queryTypeName == null) {
+            throw IllegalStateException("Introspection for ${upstream.name} did not include a queryType definition")
+        }
+
+        val typeDefinitions = linkedMapOf<String, GraphQLTypeDefinition>()
+
+        val typeNamesToFetch = schemaOverview.types.orEmpty()
+            .mapNotNull { summary -> summary.toFetchableTypeName() }
+            .toMutableSet()
+
+        typeNamesToFetch += queryTypeName
+        mutationTypeName?.let { typeNamesToFetch += it }
+
+        typeNamesToFetch.forEach { typeName ->
+            val definition = fetchTypeDefinition(upstream, typeName)
+            if (definition != null) {
+                typeDefinitions[typeName] = definition
+            }
+        }
+
+        val queryTypeDefinition = typeDefinitions[queryTypeName]
+            ?: throw IllegalStateException("Introspection for ${upstream.name} did not return fields for $queryTypeName")
+        val mutationTypeDefinition = mutationTypeName?.let { typeDefinitions[it] }
+
+        val queryFieldDefinitions = queryTypeDefinition.fields
+        val mutationFieldDefinitions = mutationTypeDefinition?.fields.orEmpty()
+
+        return UpstreamSchema(
+            service = upstream,
+            queryTypeName = queryTypeName,
+            queryFieldNames = queryFieldDefinitions.map { it.name },
+            mutationTypeName = mutationTypeName,
+            mutationFieldNames = mutationFieldDefinitions.map { it.name },
+            typeDefinitions = typeDefinitions,
+        )
+    }
+
+    private fun fetchSchemaOverview(upstream: UpstreamService): IntrospectionOverviewSchema {
+        val payload = executeQuery<IntrospectionOverviewHttpResponse>(
+            upstream = upstream,
+            query = SCHEMA_OVERVIEW_QUERY,
+        )
+
+        if (payload.errors?.isNotEmpty() == true) {
+            val message = payload.errors.joinToString(", ") { error -> error.message ?: "unknown error" }
+            throw IllegalStateException(
+                "Introspection for ${upstream.name} (${upstream.url}) returned errors: $message",
+            )
+        }
+
+        return payload.data?.schema
+            ?: throw IllegalStateException("Introspection for ${upstream.name} returned no schema data")
+    }
+
+    private fun fetchTypeDefinition(upstream: UpstreamService, typeName: String): GraphQLTypeDefinition? {
+        val payload = executeQuery<TypeDetailsHttpResponse>(
+            upstream = upstream,
+            query = TYPE_DETAILS_QUERY,
+            variables = mapOf("typeName" to typeName),
+        )
+
+        if (payload.errors?.isNotEmpty() == true) {
+            val message = payload.errors.joinToString(", ") { error -> error.message ?: "unknown error" }
+            throw IllegalStateException(
+                "Type introspection for ${upstream.name} (${upstream.url}) returned errors: $message",
+            )
+        }
+
+        return payload.data?.type?.toGraphQLTypeDefinition()
+    }
+
+    private inline fun <reified T> executeQuery(
+        upstream: UpstreamService,
+        query: String,
+        variables: Map<String, Any?> = emptyMap(),
+    ): T {
+        val payload = mutableMapOf<String, Any?>("query" to query.trimIndent())
+        if (variables.isNotEmpty()) {
+            payload["variables"] = variables
+        }
+
+        val requestBody = jsonMapper.writeValueAsString(payload)
         val request = HttpRequest.newBuilder()
             .uri(URI.create(upstream.url))
             .header("Content-Type", "application/json")
@@ -89,67 +234,7 @@ class IntrospectionService(
             )
         }
 
-        val payload: IntrospectionHttpResponse = jsonMapper.readValue(response.body())
-        val schema = payload.data?.schema
-        if (payload.errors?.isNotEmpty() == true) {
-            val message = payload.errors.joinToString(", ") { error -> error.message ?: "unknown error" }
-            throw IllegalStateException(
-                "Introspection for ${upstream.name} (${upstream.url}) returned errors: $message",
-            )
-        }
-
-        val queryType = schema?.queryType
-            ?: throw IllegalStateException("Introspection for ${upstream.name} did not include a queryType definition")
-
-        val mutationType = schema.mutationType
-        // Fetch root field names using standard GraphQL __type query per spec, in two lightweight calls
-        val queryFieldNames = queryType.name?.let { name -> fetchRootFieldNames(upstream, name) } ?: emptyList()
-        val mutationFieldNames = mutationType?.name?.let { name -> fetchRootFieldNames(upstream, name) } ?: emptyList()
-
-        return UpstreamSchema(
-            service = upstream,
-            queryTypeName = queryType.name,
-            queryFieldNames = queryFieldNames,
-            mutationTypeName = mutationType?.name,
-            mutationFieldNames = mutationFieldNames,
-            typeDefinitions = emptyMap(),
-        )
-    }
-
-    private fun fetchRootFieldNames(upstream: UpstreamService, typeName: String): List<String> {
-        val query = """
-            query GatewayTypeFieldsQuery(${ '$' }typeName: String!) {
-              __type(name: ${ '$' }typeName) {
-                fields(includeDeprecated: true) { name }
-              }
-            }
-        """.trimIndent()
-
-        val variables = mapOf("typeName" to typeName)
-        val requestBody = jsonMapper.writeValueAsString(mapOf("query" to query, "variables" to variables))
-
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(upstream.url))
-            .header("Content-Type", "application/json")
-            .timeout(Duration.ofSeconds(30))
-            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-            .build()
-
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() !in 200..299) {
-            return emptyList()
-        }
-
-        val payload: TypeFieldsHttpResponse = try {
-            jsonMapper.readValue(response.body(), TypeFieldsHttpResponse::class.java)
-        } catch (e: Exception) {
-            return emptyList()
-        }
-        if (payload.errors?.isNotEmpty() == true) {
-            return emptyList()
-        }
-
-        return payload.data?.type?.fields?.mapNotNull { it.name } ?: emptyList()
+        return jsonMapper.readValue(response.body())
     }
 }
 
@@ -175,43 +260,108 @@ data class UpstreamSchema(
     val typeDefinitions: Map<String, GraphQLTypeDefinition> = emptyMap(),
 )
 
-
-private data class IntrospectionHttpResponse @JsonCreator constructor(
-    @JsonProperty("data") val data: IntrospectionData?,
+private data class IntrospectionOverviewHttpResponse @JsonCreator constructor(
+    @JsonProperty("data") val data: IntrospectionOverviewData?,
     @JsonProperty("errors") val errors: List<GraphQLError>?,
+)
+
+private data class IntrospectionOverviewData @JsonCreator constructor(
+    @JsonProperty("__schema") val schema: IntrospectionOverviewSchema?,
+)
+
+private data class IntrospectionOverviewSchema @JsonCreator constructor(
+    @JsonProperty("queryType") val queryType: IntrospectionNamedType?,
+    @JsonProperty("mutationType") val mutationType: IntrospectionNamedType?,
+    @JsonProperty("types") val types: List<IntrospectionTypeSummary>?,
+)
+
+private data class IntrospectionNamedType @JsonCreator constructor(
+    @JsonProperty("name") val name: String?,
+)
+
+private data class IntrospectionTypeSummary @JsonCreator constructor(
+    @JsonProperty("kind") val kind: String?,
+    @JsonProperty("name") val name: String?,
+) {
+    fun toFetchableTypeName(): String? {
+        val typeName = name ?: return null
+        if (typeName.startsWith("__")) {
+            return null
+        }
+        val kindEnum = kind?.let { runCatching { GraphQLTypeKind.valueOf(it) }.getOrNull() }
+        return when (kindEnum) {
+            GraphQLTypeKind.OBJECT, GraphQLTypeKind.INPUT_OBJECT -> typeName
+            else -> null
+        }
+    }
+}
+
+private data class TypeDetailsHttpResponse @JsonCreator constructor(
+    @JsonProperty("data") val data: TypeDetailsData?,
+    @JsonProperty("errors") val errors: List<GraphQLError>?,
+)
+
+private data class TypeDetailsData @JsonCreator constructor(
+    @JsonProperty("__type") val type: IntrospectionFullType?,
 )
 
 private data class GraphQLError @JsonCreator constructor(
     @JsonProperty("message") val message: String?,
 )
 
-private data class IntrospectionData @JsonCreator constructor(
-    @JsonProperty("__schema") val schema: IntrospectionSchema?,
-)
-
-private data class IntrospectionSchema @JsonCreator constructor(
-    @JsonProperty("queryType") val queryType: IntrospectionRootType?,
-    @JsonProperty("mutationType") val mutationType: IntrospectionRootType?,
-)
-
-private data class IntrospectionRootType @JsonCreator constructor(
+private data class IntrospectionFullType @JsonCreator constructor(
+    @JsonProperty("kind") val kind: String?,
     @JsonProperty("name") val name: String?,
+    @JsonProperty("fields") val fields: List<IntrospectionField>?,
+    @JsonProperty("inputFields") val inputFields: List<IntrospectionInputValue>?,
 )
 
-// Response types for __type(name: ...) { fields { name } }
-private data class TypeFieldsHttpResponse @JsonCreator constructor(
-    @JsonProperty("data") val data: TypeFieldsData?,
-    @JsonProperty("errors") val errors: List<GraphQLError>?,
-)
-
-private data class TypeFieldsData @JsonCreator constructor(
-    @JsonProperty("__type") val type: TypeWithFields?,
-)
-
-private data class TypeWithFields @JsonCreator constructor(
-    @JsonProperty("fields") val fields: List<FieldNameOnly>?,
-)
-
-private data class FieldNameOnly @JsonCreator constructor(
+private data class IntrospectionField @JsonCreator constructor(
     @JsonProperty("name") val name: String?,
+    @JsonProperty("type") val type: IntrospectionTypeRef?,
+    @JsonProperty("args") val args: List<IntrospectionInputValue>?,
 )
+
+private data class IntrospectionInputValue @JsonCreator constructor(
+    @JsonProperty("name") val name: String?,
+    @JsonProperty("type") val type: IntrospectionTypeRef?,
+)
+
+private data class IntrospectionTypeRef @JsonCreator constructor(
+    @JsonProperty("kind") val kind: String?,
+    @JsonProperty("name") val name: String?,
+    @JsonProperty("ofType") val ofType: IntrospectionTypeRef?,
+)
+
+private fun IntrospectionField.toGraphQLFieldDefinition(): GraphQLFieldDefinition? {
+    val fieldName = name ?: return null
+    val fieldType = type?.toGraphQLTypeRef() ?: return null
+    val arguments = args.orEmpty().mapNotNull { it.toGraphQLInputValueDefinition() }
+    return GraphQLFieldDefinition(fieldName, fieldType, arguments)
+}
+
+private fun IntrospectionInputValue.toGraphQLInputValueDefinition(): GraphQLInputValueDefinition? {
+    val inputName = name ?: return null
+    val inputType = type?.toGraphQLTypeRef() ?: return null
+    return GraphQLInputValueDefinition(inputName, inputType)
+}
+
+private fun IntrospectionTypeRef.toGraphQLTypeRef(): GraphQLTypeRef {
+    val kindEnum = kind?.let { GraphQLTypeKind.valueOf(it) }
+        ?: throw IllegalStateException("Unknown GraphQL type kind: $kind")
+    val ofTypeRef = ofType?.toGraphQLTypeRef()
+    return GraphQLTypeRef(kindEnum, name, ofTypeRef)
+}
+
+private fun IntrospectionFullType.toGraphQLTypeDefinition(): GraphQLTypeDefinition? {
+    val typeName = name ?: return null
+    val kindEnum = kind?.let { GraphQLTypeKind.valueOf(it) } ?: return null
+    val fieldDefinitions = fields.orEmpty().mapNotNull { it.toGraphQLFieldDefinition() }
+    val inputDefinitions = inputFields.orEmpty().mapNotNull { it.toGraphQLInputValueDefinition() }
+    return GraphQLTypeDefinition(
+        name = typeName,
+        kind = kindEnum,
+        fields = fieldDefinitions,
+        inputFields = inputDefinitions,
+    )
+}

@@ -181,14 +181,11 @@
     - Reviewer — 请确认类型合并策略、日志输出与测试覆盖验收标准。
   - Notes/Follow-ups:
 
-- [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: todo)
-  - Owner:
+- [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: review)
+  - Owner: codex @ 2025-10-29 07:45 UTC
   - Context:
-    - 我们需要把合并后的 schema 输出为 SDL（文本 GraphQL schema），供：
-      - introspection 回答
-      - `/schema` 导出
-      - 下游客户端代码生成
-    - 同时可以裁剪掉不可达类型（即没有被任何公开的顶层字段、或其子树引用到的类型）。
+    - Root schema 合并后需要将 Query/Mutation 和普通类型转成 SDL 供 `/schema` 等端点复用。
+    - 生成 SDL 时需裁剪掉不可达类型，保证只暴露从顶层字段可触达的类型定义。
   - Acceptance:
     - 启动后能拿到一个字符串 `mergedSDL`。
     - `mergedSDL` 里包含最终的 Query/Mutation、以及被引用到的类型。
@@ -198,11 +195,17 @@
     - 打印成 SDL 字符串。
     - 从公开 root 字段向下做引用追踪，把无引用的类型剔除。
   - What Changed:
+    - 扩展 `IntrospectionService`：单次请求获取根字段完整定义与所有对象/输入类型，并填充到 `UpstreamSchema`。
+    - 更新 `RootSchemaMerger` 保存字段定义，新增 `SchemaComposer` 基于根路由与类型注册表生成裁剪后的 SDL。
+    - `Application` 组装时生成合并 SDL，日志输出预览并暴露在应用属性；补充单元测试覆盖 SDL 生成与裁剪。
   - How to Run/Test:
-    - 启动后有 debug 日志显示合并出的 SDL 片段。
+    - `./gradlew test`
+    - `./gradlew run` → 日志输出 `Generated merged schema SDL preview` 片段。
   - Known Limits:
+    - 目前仅合并对象与输入对象类型；接口、联合、枚举仍未生成 SDL，需要后续任务扩展。
   - Open Questions:
   - Next Role:
+    - Reviewer — 请确认 SDL 渲染、类型裁剪及新单元测试覆盖情况。
   - Notes/Follow-ups:
 
 ---
