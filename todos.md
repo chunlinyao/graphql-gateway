@@ -212,7 +212,7 @@
 
 ## M4. 处理 introspection 和导出公共 schema
 
-- [ ] M4.1 `/schema` 端点 (status: review)
+- [ ] M4.1 `/schema` 端点 (status: done)
   - Owner: codex @ 2025-10-29 08:30 UTC
   - Context:
     - 网关要提供一个 HTTP GET `/schema`，返回合并后的 SDL。
@@ -234,7 +234,7 @@
   - Next Role: Reviewer — 请确认 `/schema` 输出格式与测试覆盖符合验收标准。
   - Notes/Follow-ups:
 
-- [ ] M4.2 introspection 查询走本地 (status: review)
+- [ ] M4.2 introspection 查询走本地 (status: done)
   - Owner: codex @ 2025-10-29 09:40 UTC
   - Context:
     - 客户端会发 GraphQL introspection 查询（`__schema`, `__type`）。
