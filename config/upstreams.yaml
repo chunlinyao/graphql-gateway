@@ -1,7 +1,16 @@
 upstreams:
-  - name: Students
-    url: https://students.example.com/graphql
+  - name: Commons
+    url: http://be-commonsapi-app:8080/commonsGraphQL
     priority: 0
-  - name: Courses
-    url: https://courses.example.com/graphql
+  - name: Schools
+    url: http://be-schoolsapi-app:8080/schoolAffairsGraphQL
     priority: 1
+  - name: Students
+    url: http://be-studentsapi-app:8080/studentsGraphQL
+    priority: 2
+  - name: Ledgers
+    url: http://be-ledgersapi-app:8080/ledgersGraphQL
+    priority: 3
+  - name: Orchestrator
+    url: http://be-orchapi-app:8091/internalOrchestratorGraphQL
+    priority: 4
