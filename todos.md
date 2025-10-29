@@ -360,11 +360,12 @@
 
 ## M7. 打包与容器化
 
-- [ ] M7.1 生成可部署工件 (status: todo)
-  - Owner:
+- [ ] M7.1 生成可部署工件 (status: review)
+  - Owner: codex @ 2024-05-21 00:00 UTC
   - Context:
     - 需要编译出一个单文件可运行的产物（例如 fat jar / 单一二进制等）。
     - 容器镜像应能运行该产物并加载配置文件。
+    - 采用 Gradle Shadow 插件打包 fat jar，并基于 JDK 21 构建多阶段 Docker 镜像。
   - Acceptance:
     - 提供构建脚本或命令（例如 `build.sh` 或 `gradle shadowJar`）输出单体可运行工件。
     - 提供 Dockerfile:
@@ -374,18 +375,26 @@
       - ENTRYPOINT 直接运行网关并指定配置路径
     - 提供示例 docker-compose.yml（可选），展示网关+后端服务同网络下的场景。
   - Steps/Plan:
-    - 编写打包命令。
-    - 编写 Dockerfile。
-    - 本地 `docker run` 后能访问 `/healthz`、`/schema`、`/graphql`（后端允许的情况下）。
+    - 使用 Shadow 插件生成 fat jar 并配置主类/文件名。
+    - 编写多阶段 Dockerfile，在构建阶段运行 `./gradlew shadowJar`，运行阶段基于 JRE。
+    - 提供 docker-compose 示例绑定配置文件，验证容器化运行流程。
   - What Changed:
+    - `build.gradle.kts` 引入 Shadow 插件并配置 `shadowJar` 任务生成 `graphql-gateway.jar`。
+    - 新增根目录 `Dockerfile`，提供多阶段构建生成运行镜像。
+    - 新增 `docker-compose.yml` 示例，演示通过卷挂载配置启动网关容器。
   - How to Run/Test:
-    - `docker build ...`
-    - `docker run -p 4000:4000 ...`
-    - curl 验证接口。
+    - `./gradlew test`
+    - `./gradlew shadowJar`
+    - `docker build -t graphql-gateway:local .`
+    - `docker run --rm -p 4000:4000 graphql-gateway:local`
+    - `curl http://localhost:4000/healthz`
   - Known Limits:
+    - Docker 镜像默认拷贝仓库内的 `config/upstreams.yaml`，如需自定义需挂载或覆盖该文件。
+    - 镜像构建依赖 Gradle Wrapper 下载依赖，首次构建会较慢。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认 fat jar 构建产物与容器镜像满足验收标准。
   - Notes/Follow-ups:
+    - 后续可考虑加入 CI 管道自动产出镜像并推送到制品库。
 
 ---
 

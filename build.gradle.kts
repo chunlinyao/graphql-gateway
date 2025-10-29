@@ -1,8 +1,10 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "1.9.24"
     application
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 val ktorVersion = "2.3.11"
@@ -42,4 +44,16 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveFileName.set("graphql-gateway.jar")
+    mergeServiceFiles()
+    manifest {
+        attributes["Main-Class"] = "com.gateway.ApplicationKt"
+    }
+}
+
+tasks.build {
+    dependsOn(tasks.named("shadowJar"))
 }
