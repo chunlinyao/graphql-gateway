@@ -1,0 +1,7 @@
+upstreams:
+  - name: Students
+    url: https://students.example.com/graphql
+    priority: 0
+  - name: Courses
+    url: https://courses.example.com/graphql
+    priority: 1
