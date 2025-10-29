@@ -6,6 +6,7 @@ import com.gateway.introspection.GraphQLTypeDefinition
 import com.gateway.introspection.GraphQLTypeKind
 import com.gateway.introspection.GraphQLTypeRef
 import com.gateway.introspection.UpstreamSchema
+import com.gateway.graphql.GatewayGraphQLFactory
 import com.gateway.schema.RootSchemaMerger
 import com.gateway.schema.SchemaComposer
 import com.gateway.schema.TypeMerger
@@ -69,6 +70,7 @@ class ApplicationSchemaEndpointTest {
         val rootSchema = RootSchemaMerger().merge(listOf(upstreamSchema))
         val typeRegistry = TypeMerger().merge(listOf(upstreamSchema))
         val composedSchema = SchemaComposer().compose(rootSchema, typeRegistry)
+        val graphQL = GatewayGraphQLFactory().create(composedSchema.sdl)
 
         application {
             gatewayModule(
@@ -77,6 +79,7 @@ class ApplicationSchemaEndpointTest {
                 rootSchema = rootSchema,
                 typeRegistry = typeRegistry,
                 composedSchema = composedSchema,
+                graphQL = graphQL,
             )
         }
 
