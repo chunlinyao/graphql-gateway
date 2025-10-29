@@ -265,8 +265,8 @@
 
 ## M5. 业务查询路由 (/graphql 正常请求)
 
-- [ ] M5.1 提取请求的顶层字段并决定路由 (status: todo)
-  - Owner:
+- [ ] M5.1 提取请求的顶层字段并决定路由 (status: done)
+  - Owner: codex @ 2025-10-29 10:30 UTC
   - Context:
     - 对普通查询或变更，规则是：同一个 GraphQL operation 的所有顶层字段必须属于同一个后端。
     - 我们需要从请求 AST 拿到这些字段名，并根据 M3 的路由表决定目标后端。
@@ -283,16 +283,20 @@
       { "errors": [ { "message": "Fields belong to different upstreams, split the request" } ] }
       ```
   - What Changed:
+    - 新增 `GraphQLRequestRouter` 使用 graphql-java `Parser` 解析 operation，基于 `GatewayRootSchema` 的查询/变更路由表校验顶层字段归属并生成 `RoutedGraphQLRequest`；包含多 operation、缺少字段或不支持的 selection 的错误分支。
+    - `GraphQLRoutingException` 统一承载路由错误，`Application` 的 `/graphql` handler 捕获后返回 400 GraphQL 错误 JSON。
+    - `ApplicationGraphQLRoutingTest` 新增用例验证单 upstream 正常路由、Authorization 透传以及跨服务字段返回 400。
   - How to Run/Test:
-    - 发送一个只包含单一后端字段的查询 → 应通过路由检查。
-    - 发送一个跨后端字段的查询 → 返回 400。
+    - `./gradlew test`
+    - `./gradlew run` 后执行 `curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' --data '{"query":"{ students { id } }"}'`
   - Known Limits:
+    - 仅支持直接的 Query/Mutation 顶层字段；包含 fragment spread 或 inline fragment 的请求会被视为不支持并返回 400。
   - Open Questions:
-  - Next Role:
+  - Next Role: Maintainer — 评估是否需要支持 fragment/Subscription 路由策略。
   - Notes/Follow-ups:
 
-- [ ] M5.2 将请求转发到后端并回传结果 (status: review)
-  - Owner: codex @ 2024-05-20 00:00 UTC
+- [ ] M5.2 将请求转发到后端并回传结果 (status: done)
+  - Owner: codex @ 2025-10-29 10:30 UTC
   - Context:
     - 新增路由器根据合并 schema 的路由表确定 GraphQL 查询目标 upstream，并在 Ktor handler 中调用。
     - 使用 Java HttpClient 将 query/operationName/variables 转发给对应 upstream，并透传 Authorization 头。
@@ -314,10 +318,11 @@
     - `./gradlew test`
     - 或启动网关：`./gradlew run` 后 `curl -X POST -H 'Content-Type: application/json' --data '{"query":"{ students { id } }"}' http://localhost:4000/graphql`
   - Known Limits:
-    - 暂不支持单次请求拆分访问多个 upstream；遇到跨服务字段会返回 400。
+    - 暂不支持单次请求拆分访问多个 upstream；遇到跨服务字段会返回 400（由 M5.1 路由校验负责）。
     - 当前仅透传 Authorization 头，其他自定义头若需支持需后续扩展。
+    - Upstream 响应状态码需为 2xx 才视为成功；非 2xx 时统一映射为 502。
   - Open Questions:
-  - Next Role: Reviewer — 核对转发逻辑、错误处理与测试覆盖。
+  - Next Role: Maintainer — 观察是否需要扩展头透传或重试/超时策略。
   - Notes/Follow-ups:
 
 ---
