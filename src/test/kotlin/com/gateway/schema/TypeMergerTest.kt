@@ -120,6 +120,104 @@ class TypeMergerTest {
         assertEquals(scalar("ID"), statusField.type)
     }
 
+    @Test
+    fun `higher priority service owns identical object field`() {
+        val lowPriorityService = UpstreamService("payments", "http://payments/graphql", 3)
+        val highPriorityService = UpstreamService("students", "http://students/graphql", 1)
+
+        val sharedField = GraphQLFieldDefinition("status", scalar("String"), emptyList())
+
+        val lowPriorityType = GraphQLTypeDefinition(
+            name = "Student",
+            kind = GraphQLTypeKind.OBJECT,
+            fields = listOf(sharedField),
+            inputFields = emptyList(),
+        )
+
+        val highPriorityType = GraphQLTypeDefinition(
+            name = "Student",
+            kind = GraphQLTypeKind.OBJECT,
+            fields = listOf(sharedField),
+            inputFields = emptyList(),
+        )
+
+        val merged = merger.merge(
+            listOf(
+                UpstreamSchema(
+                    service = lowPriorityService,
+                    queryTypeName = "Query",
+                    queryFieldNames = emptyList(),
+                    mutationTypeName = null,
+                    mutationFieldNames = emptyList(),
+                    typeDefinitions = mapOf("Student" to lowPriorityType),
+                ),
+                UpstreamSchema(
+                    service = highPriorityService,
+                    queryTypeName = "Query",
+                    queryFieldNames = emptyList(),
+                    mutationTypeName = null,
+                    mutationFieldNames = emptyList(),
+                    typeDefinitions = mapOf("Student" to highPriorityType),
+                ),
+            ),
+        )
+
+        val student = merged.objectTypes["Student"]
+        assertNotNull(student)
+        val status = student.fields.find { it.name == "status" }
+        assertNotNull(status)
+        assertEquals(highPriorityService, status.owner)
+    }
+
+    @Test
+    fun `higher priority service owns identical input field`() {
+        val lowPriorityService = UpstreamService("payments", "http://payments/graphql", 4)
+        val highPriorityService = UpstreamService("students", "http://students/graphql", 2)
+
+        val sharedInput = GraphQLInputValueDefinition("status", scalar("String"))
+
+        val lowPriorityType = GraphQLTypeDefinition(
+            name = "StudentFilter",
+            kind = GraphQLTypeKind.INPUT_OBJECT,
+            fields = emptyList(),
+            inputFields = listOf(sharedInput),
+        )
+
+        val highPriorityType = GraphQLTypeDefinition(
+            name = "StudentFilter",
+            kind = GraphQLTypeKind.INPUT_OBJECT,
+            fields = emptyList(),
+            inputFields = listOf(sharedInput),
+        )
+
+        val merged = merger.merge(
+            listOf(
+                UpstreamSchema(
+                    service = lowPriorityService,
+                    queryTypeName = "Query",
+                    queryFieldNames = emptyList(),
+                    mutationTypeName = null,
+                    mutationFieldNames = emptyList(),
+                    typeDefinitions = mapOf("StudentFilter" to lowPriorityType),
+                ),
+                UpstreamSchema(
+                    service = highPriorityService,
+                    queryTypeName = "Query",
+                    queryFieldNames = emptyList(),
+                    mutationTypeName = null,
+                    mutationFieldNames = emptyList(),
+                    typeDefinitions = mapOf("StudentFilter" to highPriorityType),
+                ),
+            ),
+        )
+
+        val input = merged.inputObjectTypes["StudentFilter"]
+        assertNotNull(input)
+        val status = input.inputFields.find { it.name == "status" }
+        assertNotNull(status)
+        assertEquals(highPriorityService, status.owner)
+    }
+
     private fun scalar(name: String): GraphQLTypeRef = GraphQLTypeRef(GraphQLTypeKind.SCALAR, name, null)
 
     private fun nonNull(ofType: GraphQLTypeRef): GraphQLTypeRef = GraphQLTypeRef(GraphQLTypeKind.NON_NULL, null, ofType)

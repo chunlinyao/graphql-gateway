@@ -117,16 +117,31 @@ private class MutableObjectTypeAccumulator(
             return
         }
 
-        if (!fieldDefinitionsEqual(existing, definition)) {
-            logger.info(
-                "Service {} (priority={}) overrides field {} on type {} previously declared by {} (priority={})",
-                service.name,
-                service.priority,
-                definition.name,
-                typeName,
-                existing.owner.name,
-                existing.owner.priority,
-            )
+        val higherPriority = service.priority < existing.owner.priority
+        val definitionsMatch = fieldDefinitionsEqual(existing, definition)
+
+        if (higherPriority || !definitionsMatch) {
+            if (definitionsMatch) {
+                logger.info(
+                    "Service {} (priority={}) takes ownership of field {} on type {} from {} (priority={}) due to higher priority",
+                    service.name,
+                    service.priority,
+                    definition.name,
+                    typeName,
+                    existing.owner.name,
+                    existing.owner.priority,
+                )
+            } else {
+                logger.info(
+                    "Service {} (priority={}) overrides field {} on type {} previously declared by {} (priority={})",
+                    service.name,
+                    service.priority,
+                    definition.name,
+                    typeName,
+                    existing.owner.name,
+                    existing.owner.priority,
+                )
+            }
             fields[definition.name] = candidate
         }
     }
@@ -147,16 +162,31 @@ private class MutableInputObjectTypeAccumulator(
             return
         }
 
-        if (existing.type != definition.type) {
-            logger.info(
-                "Service {} (priority={}) overrides field {} on input type {} previously declared by {} (priority={})",
-                service.name,
-                service.priority,
-                definition.name,
-                typeName,
-                existing.owner.name,
-                existing.owner.priority,
-            )
+        val higherPriority = service.priority < existing.owner.priority
+        val typeMatches = existing.type == definition.type
+
+        if (higherPriority || !typeMatches) {
+            if (typeMatches) {
+                logger.info(
+                    "Service {} (priority={}) takes ownership of field {} on input type {} from {} (priority={}) due to higher priority",
+                    service.name,
+                    service.priority,
+                    definition.name,
+                    typeName,
+                    existing.owner.name,
+                    existing.owner.priority,
+                )
+            } else {
+                logger.info(
+                    "Service {} (priority={}) overrides field {} on input type {} previously declared by {} (priority={})",
+                    service.name,
+                    service.priority,
+                    definition.name,
+                    typeName,
+                    existing.owner.name,
+                    existing.owner.priority,
+                )
+            }
             fields[definition.name] = candidate
         }
     }
