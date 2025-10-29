@@ -150,8 +150,8 @@
     - Reviewer — 请确认合并策略、日志输出与单元测试覆盖验收标准。
   - Notes/Follow-ups:
 
-- [ ] M3.2 合并普通类型（非 Query/Mutation） (status: todo)
-  - Owner:
+- [ ] M3.2 合并普通类型（非 Query/Mutation） (status: review)
+  - Owner: codex @ 2025-10-29 06:37 UTC
   - Context:
     - 不同后端可能声明了同名类型（例如 StudentInfoType）。
     - 字段集合可能不同，甚至冲突。
@@ -168,11 +168,17 @@
     - 建类型名 -> {owner优先级, 字段列表} 的累积结构。
     - 逐个后端按优先级merge。
   - What Changed:
+    - 扩展 introspection 查询与模型，收集上游的对象/输入对象字段定义。
+    - 新增 `TypeMerger` 根据优先级合并普通类型并记录覆盖日志。
+    - 启动时输出示例类型的合并结果，并在应用属性中保存类型注册表。
   - How to Run/Test:
-    - 打印其中一个合并后的类型定义，确认字段合并符合优先级规则。
+    - `./gradlew test`
+    - 启动后查看日志中的 `Merged object type` 输出确认字段归属。
   - Known Limits:
+    - 目前仅合并对象类型与输入对象类型，其它类型（接口、联合、枚举）暂未处理。
   - Open Questions:
   - Next Role:
+    - Reviewer — 请确认类型合并策略、日志输出与测试覆盖验收标准。
   - Notes/Follow-ups:
 
 - [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: todo)
