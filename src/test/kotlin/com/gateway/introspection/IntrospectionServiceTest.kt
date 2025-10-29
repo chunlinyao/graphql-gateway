@@ -13,7 +13,7 @@ class IntrospectionServiceTest {
     private val service = IntrospectionService()
 
     @Test
-    fun `successful introspection returns query fields`() {
+    fun `successful introspection returns query and mutation fields`() {
         MockWebServer().use { server ->
             server.enqueue(
                 MockResponse()
@@ -29,6 +29,12 @@ class IntrospectionServiceTest {
                                 "fields": [
                                   { "name": "students" },
                                   { "name": "student" }
+                                ]
+                              },
+                              "mutationType": {
+                                "name": "Mutation",
+                                "fields": [
+                                  { "name": "createStudent" }
                                 ]
                               }
                             }
@@ -48,6 +54,8 @@ class IntrospectionServiceTest {
 
             assertEquals("Query", schema.queryTypeName)
             assertEquals(listOf("students", "student"), schema.queryFieldNames)
+            assertEquals("Mutation", schema.mutationTypeName)
+            assertEquals(listOf("createStudent"), schema.mutationFieldNames)
         }
     }
 

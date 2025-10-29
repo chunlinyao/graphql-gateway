@@ -29,6 +29,12 @@ private const val INTROSPECTION_QUERY = """
             name
           }
         }
+        mutationType {
+          name
+          fields {
+            name
+          }
+        }
       }
     }
 """
@@ -47,10 +53,12 @@ class IntrospectionService(
             try {
                 val schema = introspect(upstream)
                 logger.info(
-                    "Upstream introspection: service={}, queryType={}, fields={}",
+                    "Upstream introspection: service={}, queryType={}, queryFields={}, mutationType={}, mutationFields={}",
                     upstream.name,
                     schema.queryTypeName,
                     schema.queryFieldNames.joinToString(","),
+                    schema.mutationTypeName,
+                    schema.mutationFieldNames.joinToString(","),
                 )
                 successful += schema
             } catch (ex: Exception) {
@@ -100,11 +108,15 @@ class IntrospectionService(
             ?: throw IllegalStateException("Introspection for ${upstream.name} did not include a queryType definition")
 
         val queryFields = queryType.fields?.mapNotNull { it.name } ?: emptyList()
+        val mutationType = schema.mutationType
+        val mutationFields = mutationType?.fields?.mapNotNull { it.name } ?: emptyList()
 
         return UpstreamSchema(
             service = upstream,
             queryTypeName = queryType.name,
             queryFieldNames = queryFields,
+            mutationTypeName = mutationType?.name,
+            mutationFieldNames = mutationFields,
         )
     }
 }
@@ -126,6 +138,8 @@ data class UpstreamSchema(
     val service: UpstreamService,
     val queryTypeName: String?,
     val queryFieldNames: List<String>,
+    val mutationTypeName: String?,
+    val mutationFieldNames: List<String>,
 )
 
 private data class IntrospectionHttpResponse @JsonCreator constructor(
@@ -142,10 +156,11 @@ private data class IntrospectionData @JsonCreator constructor(
 )
 
 private data class IntrospectionSchema @JsonCreator constructor(
-    @JsonProperty("queryType") val queryType: IntrospectionQueryType?,
+    @JsonProperty("queryType") val queryType: IntrospectionRootType?,
+    @JsonProperty("mutationType") val mutationType: IntrospectionRootType?,
 )
 
-private data class IntrospectionQueryType @JsonCreator constructor(
+private data class IntrospectionRootType @JsonCreator constructor(
     @JsonProperty("name") val name: String?,
     @JsonProperty("fields") val fields: List<IntrospectionField>?,
 )

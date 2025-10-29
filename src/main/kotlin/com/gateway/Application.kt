@@ -4,6 +4,8 @@ import com.gateway.config.UpstreamConfigLoader
 import com.gateway.config.UpstreamService
 import com.gateway.introspection.IntrospectionService
 import com.gateway.introspection.UpstreamSchema
+import com.gateway.schema.GatewayRootSchema
+import com.gateway.schema.RootSchemaMerger
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
@@ -52,10 +54,38 @@ fun main() {
         logger.warn("No upstream schemas available after introspection; gateway will expose only health endpoints")
     }
 
+    val rootSchema = RootSchemaMerger().merge(upstreamSchemas)
+
+    if (rootSchema.query.fields.isNotEmpty()) {
+        logger.info("Gateway query routing table:")
+        rootSchema.query.fields.forEach { field ->
+            logger.info(
+                "  {} -> {} ({})",
+                field.fieldName,
+                field.service.name,
+                field.service.url,
+            )
+        }
+    }
+
+    rootSchema.mutation?.let { mutation ->
+        if (mutation.fields.isNotEmpty()) {
+            logger.info("Gateway mutation routing table:")
+            mutation.fields.forEach { field ->
+                logger.info(
+                    "  {} -> {} ({})",
+                    field.fieldName,
+                    field.service.name,
+                    field.service.url,
+                )
+            }
+        }
+    }
+
     logger.info("Starting GraphQL gateway on port {} using Ktor(Netty) + graphql-java stack", port)
 
     embeddedServer(Netty, port = port) {
-        gatewayModule(upstreams, upstreamSchemas)
+        gatewayModule(upstreams, upstreamSchemas, rootSchema)
     }.start(wait = true)
 }
 
@@ -63,9 +93,11 @@ fun main() {
 fun Application.gatewayModule(
     upstreams: List<UpstreamService>,
     schemas: List<UpstreamSchema>,
+    rootSchema: GatewayRootSchema,
 ) {
     attributes.put(UPSTREAMS_KEY, upstreams)
     attributes.put(UPSTREAM_SCHEMAS_KEY, schemas)
+    attributes.put(GATEWAY_ROOT_SCHEMA_KEY, rootSchema)
 
     install(ContentNegotiation) {
         jackson()
@@ -92,8 +124,10 @@ fun Application.gatewayModule() {
             )
         }
     }
-    gatewayModule(upstreams, result.schemas)
+    val rootSchema = RootSchemaMerger().merge(result.schemas)
+    gatewayModule(upstreams, result.schemas, rootSchema)
 }
 
 val UPSTREAMS_KEY: AttributeKey<List<UpstreamService>> = AttributeKey("gateway.upstreams")
 val UPSTREAM_SCHEMAS_KEY: AttributeKey<List<UpstreamSchema>> = AttributeKey("gateway.upstream.schemas")
+val GATEWAY_ROOT_SCHEMA_KEY: AttributeKey<GatewayRootSchema> = AttributeKey("gateway.root.schema")
