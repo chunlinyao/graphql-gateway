@@ -10,27 +10,35 @@
 
 ## M0. 初始化项目骨架
 
-- [ ] M0.1 建立基础工程与运行入口 (status: todo)
-  - Owner:
+- [ ] M0.1 建立基础工程与运行入口 (status: review)
+  - Owner: codex @ 2024-05-19 00:00 UTC
   - Context:
+    - **Implementation stack**: Kotlin + Ktor(Netty) + graphql-java on JVM 21 (per maintainer directive; previous Node.js scaffolding replaced).
     - 需要一个可以启动的空网关进程，后续所有功能都会挂在这个进程里。
   - Acceptance:
     - 可以本地启动一个进程（任意语言运行时皆可）。
     - 进程监听一个 HTTP 端口（固定值或配置都行）。
     - 提供 `/healthz` GET 返回 200/OK（纯本地，不依赖后端）。
   - Steps/Plan:
-    - 建项目。
-    - 建 main/entry。
-    - 建 HTTP server。
-    - 加 `/healthz`。
+    - 使用 Gradle 初始化 Kotlin/Ktor 项目骨架。
+    - 编写 `Application.kt`，通过 Ktor Netty 引擎启动 HTTP server。
+    - 暴露 `/healthz` 路由返回 200 与 JSON `{"status":"ok"}`。
   - What Changed:
+    - 新增 Gradle 构建（`build.gradle.kts`、`settings.gradle.kts`、Gradle Wrapper）并声明 Ktor(Netty) 与 graphql-java 依赖。
+    - 新增 `src/main/kotlin/com/gateway/Application.kt`，实现可启动的 Ktor 服务器与 `/healthz` 路由。
+    - 更新 `.gitignore` 以忽略 Gradle 构建输出。
   - How to Run/Test:
+    - 先安装 JDK 21+。
     - 启动命令:
+      - `./gradlew run`
     - 访问:
-      - `GET /healthz` → 200
+      - `GET http://localhost:4000/healthz` → `200` 且响应 `{"status":"ok"}`。
   - Known Limits:
+    - 仅提供 `/healthz`；尚未实现配置加载、schema 聚合、路由等核心功能。
+    - 端口目前固定为 4000（可通过 `PORT` 环境变量覆盖）。
+    - 先前的 Node.js/Express 骨架已弃用；若有历史脚本引用旧结构需同步更新。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认基础服务是否可启动并返回预期的 `/healthz` 响应。
   - Notes/Follow-ups:
 
 ---
