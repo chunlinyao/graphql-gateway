@@ -115,8 +115,8 @@
 
 ## M3. 合并多份 schema，生成“公共网关 schema”和路由表
 
-- [ ] M3.1 生成公共查询/变更根 (status: todo)
-  - Owner:
+- [ ] M3.1 生成公共查询/变更根 (status: review)
+  - Owner: codex @ 2024-05-20 00:00 UTC
   - Context:
     - 多个后端可能都有同名的顶层 Query 字段或 Mutation 字段。
     - 我们只允许一个赢家：优先级数字小的服务胜出。
@@ -127,17 +127,27 @@
       - 例：`routing["getStudent"] = { serviceName: "Students", serviceUrl: "..." }`
     - 冲突字段按优先级决定胜者，劣势后端的同名字段被丢弃。
   - Steps/Plan:
+    - 扩展 introspection 结构，补充 Mutation 字段信息。
     - 遍历每个后端 introspection 结果。
     - 按 priority 排序。
     - 构建新的公共 Query/Mutation 字段列表和 routing。
   - What Changed:
+    - 扩展 introspection 查询，捕获 mutation 根字段并在 `UpstreamSchema` 中存储。
+    - 新增 `RootSchemaMerger`，根据优先级合并 Query/Mutation 字段并生成路由表。
+    - 网关启动时计算并日志输出路由表，同时在应用属性中注册合并结果。
+    - 为 schema 合并逻辑与扩展后的 introspection 增加单元测试。
   - How to Run/Test:
     - 启动后打印路由表示例：
       - `getStudent -> Students(...)`
       - `getLedgerInfo -> Ledgers(...)`
+    - `./gradlew test`
+    - `./gradlew run` 后查看日志中的 `Gateway query routing table` / `Gateway mutation routing table`
   - Known Limits:
+    - 仅根据字段名进行冲突判定，未对字段参数或返回类型做额外一致性校验。
+    - Mutation 根类型仅在至少一个后端提供时生成，暂未校验名称是否统一。
   - Open Questions:
   - Next Role:
+    - Reviewer — 请确认合并策略、日志输出与单元测试覆盖验收标准。
   - Notes/Follow-ups:
 
 - [ ] M3.2 合并普通类型（非 Query/Mutation） (status: todo)
