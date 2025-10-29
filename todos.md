@@ -329,24 +329,32 @@
 
 ## M6. 健康检查与观测
 
-- [ ] M6.1 健康/就绪探针 (status: todo)
-  - Owner:
+- [ ] M6.1 健康/就绪探针 (status: review)
+  - Owner: codex @ 2025-10-30 00:00 UTC
   - Context:
     - 运维需要判断网关是否已成功完成 schema 聚合并可接受流量。
+    - 为 `/readyz` 提供可观察状态，避免部分 upstream 失败时仍然对外宣称就绪。
   - Acceptance:
     - `GET /healthz` → 返回 200 以及简单 JSON，比如 `{ "status": "ok" }`。
     - `GET /readyz` → 只有在所有后端 introspection 成功 + 合并完成后才返回 200，否则返回 500/503。
   - Steps/Plan:
-    - 启动完成后将某个全局 flag 设为 ready。
-    - `/readyz` 根据该 flag 决定响应。
+    - [x] 启动完成后将可公开访问的 readiness 状态写入应用属性。
+    - [x] `/readyz` 基于 readiness 状态返回 200 或 503，并提供失败详情。
+    - [x] 增加自动化测试覆盖 ready 与 not ready 场景。
   - What Changed:
+    - 新增 `GatewayReadiness` 数据类记录期望 upstream 数量、解析成功数、失败原因与 GraphQL schema 可用性。
+    - `Application.gatewayModule` 暴露 `/readyz` 路由，返回 readiness 状态；失败时附带剩余问题清单。
+    - 服务器启动时保存 readiness 状态并在 `gatewayModule()` 重用；补充单元测试验证 `/readyz` 正常和失败响应。
   - How to Run/Test:
-    - 启动成功后，访问 `/readyz` 返回 200。
-    - 模拟 introspection 失败场景（可临时注释/伪造），应返回非 200。
+    - `./gradlew test`
+    - `./gradlew run` 后执行 `curl http://localhost:4000/readyz` 验证就绪响应。
+    - 通过修改 upstream 配置制造 introspection 失败，可观察 `/readyz` 返回 503 并附带错误原因。
   - Known Limits:
+    - 当前 readiness 仅依据启动期 introspection 与 schema 构建状态；运行期 upstream 退化需结合后续任务扩展探针。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请验证 `/readyz` 状态与失败详情是否满足验收标准。
   - Notes/Follow-ups:
+    - 后续可考虑将 readiness 状态暴露给 metrics/事件系统或增加运行期健康检查。
 
 ---
 
