@@ -24,6 +24,7 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("io.ktor:ktor-server-test-host-jvm:$ktorVersion")
 }
 
 tasks.withType<KotlinCompile> {
