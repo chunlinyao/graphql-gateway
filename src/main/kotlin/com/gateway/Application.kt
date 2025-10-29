@@ -5,6 +5,8 @@ import com.gateway.config.UpstreamService
 import com.gateway.graphql.GatewayGraphQLFactory
 import com.gateway.graphql.GraphQLRequest
 import com.gateway.graphql.IntrospectionQueryDetector
+import com.gateway.health.GatewayReadiness
+import com.gateway.introspection.IntrospectionFailure
 import com.gateway.introspection.IntrospectionService
 import com.gateway.introspection.UpstreamSchema
 import com.gateway.routing.GraphQLRequestForwarder
@@ -21,6 +23,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.HttpStatusCode.Companion.BadGateway
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
+import io.ktor.http.HttpStatusCode.Companion.ServiceUnavailable
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -129,7 +132,15 @@ fun main() {
     logger.info("Starting GraphQL gateway on port {} using Ktor(Netty) + graphql-java stack", port)
 
     embeddedServer(Netty, port = port) {
-        gatewayModule(upstreams, upstreamSchemas, rootSchema, typeRegistry, composedSchema, graphQL)
+        gatewayModule(
+            upstreams = upstreams,
+            schemas = upstreamSchemas,
+            rootSchema = rootSchema,
+            typeRegistry = typeRegistry,
+            composedSchema = composedSchema,
+            graphQL = graphQL,
+            introspectionFailures = introspectionResult.failures,
+        )
     }.start(wait = true)
 }
 
@@ -141,6 +152,7 @@ fun Application.gatewayModule(
     typeRegistry: GatewayTypeRegistry,
     composedSchema: ComposedSchema,
     graphQL: GraphQL?,
+    introspectionFailures: List<IntrospectionFailure> = emptyList(),
 ) {
     attributes.put(UPSTREAMS_KEY, upstreams)
     attributes.put(UPSTREAM_SCHEMAS_KEY, schemas)
@@ -148,6 +160,13 @@ fun Application.gatewayModule(
     attributes.put(GATEWAY_TYPE_REGISTRY_KEY, typeRegistry)
     attributes.put(GATEWAY_MERGED_SDL_KEY, composedSchema.sdl)
     graphQL?.let { attributes.put(GATEWAY_GRAPHQL_KEY, it) }
+    val readiness = GatewayReadiness(
+        expectedUpstreams = upstreams.size,
+        schemasAvailable = schemas.size,
+        introspectionFailures = introspectionFailures,
+        graphQLAvailable = graphQL != null,
+    )
+    attributes.put(GATEWAY_READINESS_KEY, readiness)
 
     install(ContentNegotiation) {
         jackson()
@@ -159,6 +178,32 @@ fun Application.gatewayModule(
     routing {
         get("/healthz") {
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        get("/readyz") {
+            val readinessState = call.application.attributes[GATEWAY_READINESS_KEY]
+            if (readinessState.isReady) {
+                call.respond(HttpStatusCode.OK, mapOf("status" to "ready"))
+            } else {
+                call.respond(
+                    status = ServiceUnavailable,
+                    message = mapOf(
+                        "status" to "not_ready",
+                        "expectedUpstreams" to readinessState.expectedUpstreams,
+                        "schemasLoaded" to readinessState.schemasAvailable,
+                        "graphQLAvailable" to readinessState.graphQLAvailable,
+                        "failures" to readinessState.introspectionFailures.map { failure ->
+                            mapOf(
+                                "name" to failure.service.name,
+                                "url" to failure.service.url,
+                                "priority" to failure.service.priority,
+                                "reason" to failure.reason,
+                            )
+                        },
+                        "reasons" to readinessState.reasons(),
+                    ),
+                )
+            }
         }
 
         get("/schema") {
@@ -285,7 +330,15 @@ fun Application.gatewayModule() {
     val typeRegistry = TypeMerger().merge(result.schemas)
     val composedSchema = SchemaComposer().compose(rootSchema, typeRegistry)
     val graphQL = GatewayGraphQLFactory().create(composedSchema.sdl)
-    gatewayModule(upstreams, result.schemas, rootSchema, typeRegistry, composedSchema, graphQL)
+    gatewayModule(
+        upstreams = upstreams,
+        schemas = result.schemas,
+        rootSchema = rootSchema,
+        typeRegistry = typeRegistry,
+        composedSchema = composedSchema,
+        graphQL = graphQL,
+        introspectionFailures = result.failures,
+    )
 }
 
 val UPSTREAMS_KEY: AttributeKey<List<UpstreamService>> = AttributeKey("gateway.upstreams")
@@ -294,3 +347,4 @@ val GATEWAY_ROOT_SCHEMA_KEY: AttributeKey<GatewayRootSchema> = AttributeKey("gat
 val GATEWAY_TYPE_REGISTRY_KEY: AttributeKey<GatewayTypeRegistry> = AttributeKey("gateway.types.registry")
 val GATEWAY_MERGED_SDL_KEY: AttributeKey<String> = AttributeKey("gateway.merged.sdl")
 val GATEWAY_GRAPHQL_KEY: AttributeKey<GraphQL> = AttributeKey("gateway.graphql")
+val GATEWAY_READINESS_KEY: AttributeKey<GatewayReadiness> = AttributeKey("gateway.readiness")
