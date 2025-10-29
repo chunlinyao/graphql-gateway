@@ -19,6 +19,8 @@ dependencies {
     implementation("io.ktor:ktor-serialization-jackson-jvm:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.6")
     implementation("com.graphql-java:graphql-java:$graphqlJavaVersion")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.1")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
 
     testImplementation(kotlin("test"))
 }

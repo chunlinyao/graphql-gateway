@@ -45,11 +45,12 @@
 
 ## M1. 读取后端服务配置
 
-- [ ] M1.1 支持从配置文件读取上游服务清单 (status: todo)
-  - Owner:
+- [ ] M1.1 支持从配置文件读取上游服务清单 (status: review)
+  - Owner: codex @ 2024-05-19 01:00 UTC
   - Context:
     - 网关需要知道有哪些后端 GraphQL 服务（URL、名称、优先级）。
     - 这些信息后续会被 introspection / 合并 / 路由使用。
+    - 约定配置文件默认位于 `config/upstreams.yaml`，亦可通过 `UPSTREAMS_CONFIG` 覆盖。
   - Acceptance:
     - 存在一个配置文件（例如 `config/upstreams.yaml` 或等价物）。
     - 代码能够读取并解析这个文件，得到一组服务对象：
@@ -62,12 +63,20 @@
     - 编写加载函数。
     - 启动时读取并打印解析出的服务列表。
   - What Changed:
+    - 新增 `config/upstreams.yaml` 示例配置。
+    - 新增 `UpstreamConfigLoader` 负责解析 YAML 并按 priority 排序。
+    - 启动时加载 upstreams 并在日志中打印，支持 `UPSTREAMS_CONFIG` 环境变量覆盖路径。
+    - 补充 Jackson YAML/Kotlin 模块依赖与解析单元测试。
   - How to Run/Test:
-    - 启动网关并确认日志里打印出各 upstream。
+    - `./gradlew test`。
+    - `./gradlew run` → 启动日志打印每个 upstream。
   - Known Limits:
+    - 当前仅支持本地文件路径；后续如需远程配置需扩展加载器。
+    - 配置文件解析失败将中断启动（无降级逻辑）。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认配置读取逻辑与日志输出符合预期。
   - Notes/Follow-ups:
+    - 后续任务可复用 `UpstreamService` 数据类以挂接 introspection。
 
 ---
 
