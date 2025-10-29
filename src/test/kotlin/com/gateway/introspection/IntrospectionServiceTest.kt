@@ -24,19 +24,49 @@ class IntrospectionServiceTest {
                         {
                           "data": {
                             "__schema": {
-                              "queryType": {
-                                "name": "Query",
-                                "fields": [
-                                  { "name": "students" },
-                                  { "name": "student" }
-                                ]
-                              },
-                              "mutationType": {
-                                "name": "Mutation",
-                                "fields": [
-                                  { "name": "createStudent" }
-                                ]
-                              }
+                              "queryType": { "name": "Query" },
+                              "mutationType": { "name": "Mutation" }
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            // __type for Query
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """
+                        {
+                          "data": {
+                            "__type": {
+                              "fields": [
+                                { "name": "students" },
+                                { "name": "student" }
+                              ]
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            // __type for Mutation
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """
+                        {
+                          "data": {
+                            "__type": {
+                              "fields": [
+                                { "name": "createStudent" }
+                              ]
                             }
                           }
                         }
@@ -48,9 +78,17 @@ class IntrospectionServiceTest {
             val upstream = UpstreamService("Test", server.url("/graphql").toString(), 0)
             val schema = service.introspect(upstream)
 
-            val recordedRequest = server.takeRequest()
-            assertEquals("POST", recordedRequest.method)
-            assertEquals("/graphql", recordedRequest.path)
+            val recordedRequest1 = server.takeRequest()
+            assertEquals("POST", recordedRequest1.method)
+            assertEquals("/graphql", recordedRequest1.path)
+
+            val recordedRequest2 = server.takeRequest()
+            assertEquals("POST", recordedRequest2.method)
+            assertEquals("/graphql", recordedRequest2.path)
+
+            val recordedRequest3 = server.takeRequest()
+            assertEquals("POST", recordedRequest3.method)
+            assertEquals("/graphql", recordedRequest3.path)
 
             assertEquals("Query", schema.queryTypeName)
             assertEquals(listOf("students", "student"), schema.queryFieldNames)
