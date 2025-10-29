@@ -115,7 +115,7 @@
 
 ## M3. 合并多份 schema，生成“公共网关 schema”和路由表
 
-- [ ] M3.1 生成公共查询/变更根 (status: review)
+- [ ] M3.1 生成公共查询/变更根 (status: done)
   - Owner: codex @ 2024-05-20 00:00 UTC
   - Context:
     - 多个后端可能都有同名的顶层 Query 字段或 Mutation 字段。
