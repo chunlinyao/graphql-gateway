@@ -2,6 +2,8 @@ package com.gateway
 
 import com.gateway.config.UpstreamConfigLoader
 import com.gateway.config.UpstreamService
+import com.gateway.introspection.IntrospectionService
+import com.gateway.introspection.UpstreamSchema
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
@@ -30,16 +32,23 @@ fun main() {
         )
     }
 
+    val introspectionService = IntrospectionService()
+    val upstreamSchemas = introspectionService.introspectAll(upstreams)
+
     logger.info("Starting GraphQL gateway on port {} using Ktor(Netty) + graphql-java stack", port)
 
     embeddedServer(Netty, port = port) {
-        gatewayModule(upstreams)
+        gatewayModule(upstreams, upstreamSchemas)
     }.start(wait = true)
 }
 
 @Suppress("unused")
-fun Application.gatewayModule(upstreams: List<UpstreamService>) {
+fun Application.gatewayModule(
+    upstreams: List<UpstreamService>,
+    schemas: List<UpstreamSchema>,
+) {
     attributes.put(UPSTREAMS_KEY, upstreams)
+    attributes.put(UPSTREAM_SCHEMAS_KEY, schemas)
 
     install(ContentNegotiation) {
         jackson()
@@ -55,7 +64,9 @@ fun Application.gatewayModule(upstreams: List<UpstreamService>) {
 @Suppress("unused")
 fun Application.gatewayModule() {
     val upstreams = UpstreamConfigLoader().load()
-    gatewayModule(upstreams)
+    val schemas = IntrospectionService().introspectAll(upstreams)
+    gatewayModule(upstreams, schemas)
 }
 
 val UPSTREAMS_KEY: AttributeKey<List<UpstreamService>> = AttributeKey("gateway.upstreams")
+val UPSTREAM_SCHEMAS_KEY: AttributeKey<List<UpstreamSchema>> = AttributeKey("gateway.upstream.schemas")

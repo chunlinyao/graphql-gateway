@@ -82,8 +82,8 @@
 
 ## M2. 对每个后端做 GraphQL introspection
 
-- [ ] M2.1 实现 introspection 抓取逻辑 (status: todo)
-  - Owner:
+- [ ] M2.1 实现 introspection 抓取逻辑 (status: review)
+  - Owner: codex @ 2024-05-19 02:30 UTC
   - Context:
     - 网关启动时需要拉取每个后端的 GraphQL schema。
     - 使用标准 GraphQL introspection 查询（`__schema`, `__type` 等）。
@@ -96,13 +96,18 @@
     - 实现 HTTP POST 调用下游。
     - 解析结果为本地结构。
   - What Changed:
+    - 新增 `IntrospectionService`，使用 Java `HttpClient` 向每个上游发送 introspection 查询并解析响应。
+    - 启动流程调用 introspection 并将结果存入应用属性，日志打印 Query 根字段列表。
+    - 补充 `MockWebServer` 单元测试覆盖成功与错误返回场景。
   - How to Run/Test:
-    - 启动网关。
-    - 在日志中打印每个后端的 Query 根字段列表（顶层 query 字段名）。
+    - `./gradlew test`
+    - `./gradlew run` → 启动日志输出每个 upstream 的 queryType 与字段列表。
   - Known Limits:
+    - 目前仅抓取 Query 类型字段，Mutation/Subscription 字段将在后续任务扩展。
+    - 尚未处理授权头透传；后续任务决定策略。
   - Open Questions:
     - 需要透传哪些请求头？（Authorization等）
-  - Next Role:
+  - Next Role: Reviewer — 请确认 introspection 响应解析与错误处理覆盖验收标准。
   - Notes/Follow-ups:
 
 ---
