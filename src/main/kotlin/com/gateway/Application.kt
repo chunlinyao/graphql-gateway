@@ -10,6 +10,7 @@ import com.gateway.schema.ComposedSchema
 import com.gateway.schema.RootSchemaMerger
 import com.gateway.schema.SchemaComposer
 import com.gateway.schema.TypeMerger
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
@@ -19,6 +20,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
@@ -137,6 +139,15 @@ fun Application.gatewayModule(
     routing {
         get("/healthz") {
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        get("/schema") {
+            val mergedSchema = call.application.attributes[GATEWAY_MERGED_SDL_KEY]
+            call.respondText(
+                text = mergedSchema,
+                contentType = ContentType.Text.Plain,
+                status = HttpStatusCode.OK,
+            )
         }
     }
 }

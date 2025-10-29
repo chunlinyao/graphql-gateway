@@ -212,8 +212,8 @@
 
 ## M4. 处理 introspection 和导出公共 schema
 
-- [ ] M4.1 `/schema` 端点 (status: todo)
-  - Owner:
+- [ ] M4.1 `/schema` 端点 (status: review)
+  - Owner: codex @ 2025-10-29 08:30 UTC
   - Context:
     - 网关要提供一个 HTTP GET `/schema`，返回合并后的 SDL。
     - 方便其他服务或前端生成类型。
@@ -222,11 +222,16 @@
   - Steps/Plan:
     - 把 M3.3 产出的合并 SDL 暴露给 HTTP 层。
   - What Changed:
+    - `Application.kt` 新增 `/schema` 路由，直接返回组合后的 SDL 文本并设置 `text/plain` 响应。
+    - 增加 `ApplicationSchemaEndpointTest` 覆盖 GET `/schema` 行为，验证状态码、Content-Type 与内容。
+    - 构建脚本引入 `ktor-server-test-host` 依赖以支持路由测试。
   - How to Run/Test:
-    - 启动后 `curl GET /schema` 能看到 SDL。
+    - `./gradlew test`
+    - `./gradlew run` 后执行 `curl -i http://localhost:4000/schema` 验证 200 与 SDL 输出。
   - Known Limits:
+    - 若上游 introspection 失败导致合并 SDL 为空，接口仍返回空字符串；后续可结合就绪探针强化校验。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认 `/schema` 输出格式与测试覆盖符合验收标准。
   - Notes/Follow-ups:
 
 - [ ] M4.2 introspection 查询走本地 (status: todo)
