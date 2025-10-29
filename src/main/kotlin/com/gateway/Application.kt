@@ -7,6 +7,8 @@ import com.gateway.graphql.GraphQLRequest
 import com.gateway.graphql.IntrospectionQueryDetector
 import com.gateway.introspection.IntrospectionService
 import com.gateway.introspection.UpstreamSchema
+import com.gateway.routing.GraphQLRequestForwarder
+import com.gateway.routing.GraphQLRequestRouter
 import com.gateway.schema.ComposedSchema
 import com.gateway.schema.GatewayRootSchema
 import com.gateway.schema.GatewayTypeRegistry
@@ -14,7 +16,11 @@ import com.gateway.schema.RootSchemaMerger
 import com.gateway.schema.SchemaComposer
 import com.gateway.schema.TypeMerger
 import io.ktor.http.ContentType
+import io.ktor.http.ContentType.Application.Json
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpStatusCode.Companion.BadGateway
+import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -31,6 +37,7 @@ import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
 import graphql.ExecutionInput
 import graphql.GraphQL
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
 fun main() {
@@ -146,6 +153,9 @@ fun Application.gatewayModule(
         jackson()
     }
 
+    val requestRouter = GraphQLRequestRouter(rootSchema)
+    val requestForwarder = GraphQLRequestForwarder()
+
     routing {
         get("/healthz") {
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
@@ -197,13 +207,61 @@ fun Application.gatewayModule(
                 return@post
             }
 
-            call.respond(
-                status = HttpStatusCode.NotImplemented,
-                message = mapOf(
-                    "errors" to listOf(
-                        mapOf("message" to "Only introspection queries are supported at this stage"),
+            val routedRequest = try {
+                requestRouter.route(query, request.operationName)
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                val message = ex.message ?: "Unable to route request"
+                call.respond(
+                    status = BadRequest,
+                    message = mapOf(
+                        "errors" to listOf(mapOf("message" to message)),
                     ),
-                ),
+                )
+                return@post
+            }
+
+            val forwardResult = try {
+                requestForwarder.forward(
+                    request = request,
+                    routedRequest = routedRequest,
+                    authorizationHeader = call.request.headers[HttpHeaders.Authorization],
+                )
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                call.respond(
+                    status = BadGateway,
+                    message = mapOf(
+                        "errors" to listOf(
+                            mapOf(
+                                "message" to "Failed to contact upstream service '${routedRequest.service.name}': ${ex.message ?: ex.javaClass.simpleName}",
+                            ),
+                        ),
+                    ),
+                )
+                return@post
+            }
+
+            if (forwardResult.statusCode !in 200..299) {
+                call.respond(
+                    status = BadGateway,
+                    message = mapOf(
+                        "errors" to listOf(
+                            mapOf(
+                                "message" to "Upstream service '${routedRequest.service.name}' responded with status ${forwardResult.statusCode}",
+                            ),
+                        ),
+                    ),
+                )
+                return@post
+            }
+
+            call.respondText(
+                text = forwardResult.body,
+                contentType = Json,
+                status = HttpStatusCode.OK,
             )
         }
     }
