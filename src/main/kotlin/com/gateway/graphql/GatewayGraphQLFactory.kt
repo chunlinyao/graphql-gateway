@@ -1,6 +1,7 @@
 package com.gateway.graphql
 
 import graphql.GraphQL
+import graphql.scalars.ExtendedScalars
 import graphql.schema.GraphQLSchema
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaGenerator
@@ -21,7 +22,11 @@ class GatewayGraphQLFactory(
 
         return try {
             val typeRegistry = schemaParser.parse(mergedSdl)
-            val runtimeWiring = RuntimeWiring.newRuntimeWiring().build()
+            val runtimeWiring = RuntimeWiring.newRuntimeWiring()
+                .scalar(ExtendedScalars.GraphQLLong)
+                .scalar(ExtendedScalars.DateTime)
+                .scalar(ExtendedScalars.Date)
+                .build()
             val graphQLSchema: GraphQLSchema = schemaGenerator.makeExecutableSchema(typeRegistry, runtimeWiring)
             GraphQL.newGraphQL(graphQLSchema).build()
         } catch (ex: Exception) {

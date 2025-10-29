@@ -19,6 +19,8 @@ class SchemaComposer {
     fun compose(rootSchema: GatewayRootSchema, typeRegistry: GatewayTypeRegistry): ComposedSchema {
         val reachableObjects = linkedSetOf<String>()
         val reachableInputs = linkedSetOf<String>()
+        val reachableEnums = linkedSetOf<String>()
+        val reachableScalars = linkedSetOf<String>()
         val objectQueue = ArrayDeque<String>()
         val inputQueue = ArrayDeque<String>()
 
@@ -30,6 +32,13 @@ class SchemaComposer {
             }
             if (typeRegistry.inputObjectTypes.containsKey(typeName) && reachableInputs.add(typeName)) {
                 inputQueue.add(typeName)
+            }
+            if (typeRegistry.enumTypes.containsKey(typeName)) {
+                reachableEnums.add(typeName)
+            }
+            // Track custom scalars (non-built-in scalars)
+            if (baseType.kind == GraphQLTypeKind.SCALAR && !isBuiltInScalar(typeName)) {
+                reachableScalars.add(typeName)
             }
         }
 
@@ -62,6 +71,23 @@ class SchemaComposer {
         }
 
         val sections = mutableListOf<String>()
+        
+        // Add schema directive to explicitly declare root types
+        val schemaDirective = buildString {
+            appendLine("schema {")
+            append("  query: ").appendLine(rootSchema.query.typeName)
+            rootSchema.mutation?.let { mutation ->
+                append("  mutation: ").appendLine(mutation.typeName)
+            }
+            append("}")
+        }
+        sections += schemaDirective
+        
+        // Add custom scalar declarations (scalars that are not built-in GraphQL types)
+        reachableScalars.sorted().forEach { scalarName ->
+            sections += "scalar $scalarName"
+        }
+        
         sections += renderObjectType(
             keyword = "type",
             name = rootSchema.query.typeName,
@@ -94,6 +120,12 @@ class SchemaComposer {
                 name = inputType.name,
                 fieldDefinitions = inputType.inputFields.map { renderInputField(it) },
             )
+        }
+
+        reachableEnums.sorted().mapNotNull { typeName ->
+            typeRegistry.enumTypes[typeName]
+        }.forEach { enumType ->
+            sections += renderEnumType(enumType.name, enumType.values)
         }
 
         val sdl = sections.joinToString(separator = "\n\n")
@@ -143,5 +175,20 @@ class SchemaComposer {
         }
         builder.append("}")
         return builder.toString()
+    }
+
+    private fun renderEnumType(name: String, values: List<String>): String {
+        val builder = StringBuilder()
+        builder.appendLine("enum $name {")
+        values.forEach { value ->
+            builder.append("  ").appendLine(value)
+        }
+        builder.append("}")
+        return builder.toString()
+    }
+    
+    private fun isBuiltInScalar(typeName: String): Boolean {
+        // GraphQL built-in scalar types
+        return typeName in setOf("Int", "Float", "String", "Boolean", "ID")
     }
 }

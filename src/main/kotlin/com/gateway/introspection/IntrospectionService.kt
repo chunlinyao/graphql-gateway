@@ -60,6 +60,9 @@ private const val TYPE_DETAILS_QUERY = """
             ...GatewayTypeRef
           }
         }
+        enumValues {
+          name
+        }
       }
     }
 
@@ -290,7 +293,7 @@ private data class IntrospectionTypeSummary @JsonCreator constructor(
         }
         val kindEnum = kind?.let { runCatching { GraphQLTypeKind.valueOf(it) }.getOrNull() }
         return when (kindEnum) {
-            GraphQLTypeKind.OBJECT, GraphQLTypeKind.INPUT_OBJECT -> typeName
+            GraphQLTypeKind.OBJECT, GraphQLTypeKind.INPUT_OBJECT, GraphQLTypeKind.ENUM -> typeName
             else -> null
         }
     }
@@ -309,11 +312,16 @@ private data class GraphQLError @JsonCreator constructor(
     @JsonProperty("message") val message: String?,
 )
 
+private data class IntrospectionEnumValue @JsonCreator constructor(
+    @JsonProperty("name") val name: String?,
+)
+
 private data class IntrospectionFullType @JsonCreator constructor(
     @JsonProperty("kind") val kind: String?,
     @JsonProperty("name") val name: String?,
     @JsonProperty("fields") val fields: List<IntrospectionField>?,
     @JsonProperty("inputFields") val inputFields: List<IntrospectionInputValue>?,
+    @JsonProperty("enumValues") val enumValues: List<IntrospectionEnumValue>?,
 )
 
 private data class IntrospectionField @JsonCreator constructor(
@@ -358,10 +366,12 @@ private fun IntrospectionFullType.toGraphQLTypeDefinition(): GraphQLTypeDefiniti
     val kindEnum = kind?.let { GraphQLTypeKind.valueOf(it) } ?: return null
     val fieldDefinitions = fields.orEmpty().mapNotNull { it.toGraphQLFieldDefinition() }
     val inputDefinitions = inputFields.orEmpty().mapNotNull { it.toGraphQLInputValueDefinition() }
+    val enumValueNames = enumValues.orEmpty().mapNotNull { it.name }
     return GraphQLTypeDefinition(
         name = typeName,
         kind = kindEnum,
         fields = fieldDefinitions,
         inputFields = inputDefinitions,
+        enumValues = enumValueNames,
     )
 }

@@ -54,4 +54,5 @@ data class GraphQLTypeDefinition(
     val kind: GraphQLTypeKind,
     val fields: List<GraphQLFieldDefinition>,
     val inputFields: List<GraphQLInputValueDefinition>,
+    val enumValues: List<String> = emptyList(),
 )

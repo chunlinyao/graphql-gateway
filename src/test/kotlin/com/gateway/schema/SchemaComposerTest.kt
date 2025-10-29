@@ -113,6 +113,11 @@ class SchemaComposerTest {
         val composed = composer.compose(rootSchema, typeRegistry)
 
         val expectedSdl = """
+            |schema {
+            |  query: Query
+            |  mutation: Mutation
+            |}
+            |
             |type Query {
             |  students(filter: StudentFilter): [Student]
             |  student(id: ID!): Student

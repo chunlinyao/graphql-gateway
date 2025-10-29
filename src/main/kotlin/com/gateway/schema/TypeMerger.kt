@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory
 data class GatewayTypeRegistry(
     val objectTypes: Map<String, GatewayObjectType>,
     val inputObjectTypes: Map<String, GatewayInputObjectType>,
+    val enumTypes: Map<String, GatewayEnumType> = emptyMap(),
 )
 
 data class GatewayObjectType(
@@ -45,6 +46,11 @@ data class GatewayInputField(
     val owner: UpstreamService,
 )
 
+data class GatewayEnumType(
+    val name: String,
+    val values: List<String>,
+)
+
 /**
  * Merge type definitions from all upstream schemas according to priority rules.
  */
@@ -56,12 +62,14 @@ class TypeMerger {
 
         val objectAccumulators = linkedMapOf<String, MutableObjectTypeAccumulator>()
         val inputAccumulators = linkedMapOf<String, MutableInputObjectTypeAccumulator>()
+        val enumTypes = linkedMapOf<String, GatewayEnumType>()
 
         sorted.forEach { schema ->
             schema.typeDefinitions.values.forEach { definition ->
                 when (definition.kind) {
                     GraphQLTypeKind.OBJECT -> mergeObjectType(objectAccumulators, definition, schema)
                     GraphQLTypeKind.INPUT_OBJECT -> mergeInputObjectType(inputAccumulators, definition, schema)
+                    GraphQLTypeKind.ENUM -> mergeEnumType(enumTypes, definition)
                     else -> Unit
                 }
             }
@@ -75,7 +83,7 @@ class TypeMerger {
             .mapValues { (_, accumulator) -> accumulator.toGatewayType() }
             .filterValues { type -> type.inputFields.isNotEmpty() }
 
-        return GatewayTypeRegistry(objectTypes, inputObjectTypes)
+        return GatewayTypeRegistry(objectTypes, inputObjectTypes, enumTypes)
     }
 
     private fun mergeObjectType(
@@ -100,6 +108,19 @@ class TypeMerger {
         val accumulator = registry.getOrPut(definition.name) { MutableInputObjectTypeAccumulator(definition.name) }
         definition.inputFields.forEach { field ->
             accumulator.addField(field, schema.service, logger)
+        }
+    }
+
+    private fun mergeEnumType(
+        registry: MutableMap<String, GatewayEnumType>,
+        definition: GraphQLTypeDefinition,
+    ) {
+        // For enums, we take the first occurrence (highest priority)
+        if (!registry.containsKey(definition.name)) {
+            registry[definition.name] = GatewayEnumType(
+                name = definition.name,
+                values = definition.enumValues,
+            )
         }
     }
 }
