@@ -163,10 +163,10 @@ private class MutableInputObjectTypeAccumulator(
         }
 
         val higherPriority = service.priority < existing.owner.priority
-        val typeMatches = existing.type == definition.type
+        val definitionsMatch = inputFieldDefinitionsEqual(existing, definition)
 
-        if (higherPriority || !typeMatches) {
-            if (typeMatches) {
+        if (higherPriority || !definitionsMatch) {
+            if (definitionsMatch) {
                 logger.info(
                     "Service {} (priority={}) takes ownership of field {} on input type {} from {} (priority={}) due to higher priority",
                     service.name,
@@ -206,6 +206,11 @@ private fun GraphQLInputValueDefinition.toGatewayField(service: UpstreamService)
     type = type,
     owner = service,
 )
+
+private fun inputFieldDefinitionsEqual(
+    existing: GatewayInputField,
+    candidate: GraphQLInputValueDefinition,
+): Boolean = existing.type == candidate.type
 
 private fun fieldDefinitionsEqual(existing: GatewayObjectField, candidate: GraphQLFieldDefinition): Boolean {
     if (existing.type != candidate.type) {
