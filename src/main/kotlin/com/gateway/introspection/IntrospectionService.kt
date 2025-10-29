@@ -25,16 +25,46 @@ private const val INTROSPECTION_QUERY = """
       __schema {
         queryType {
           name
-          fields {
+          fields(includeDeprecated: true) {
             name
           }
         }
         mutationType {
           name
-          fields {
+          fields(includeDeprecated: true) {
             name
           }
         }
+        types {
+          kind
+          name
+          fields(includeDeprecated: true) {
+            name
+            args {
+              name
+              type {
+                ...TypeRef
+              }
+            }
+            type {
+              ...TypeRef
+            }
+          }
+          inputFields {
+            name
+            type {
+              ...TypeRef
+            }
+          }
+        }
+      }
+    }
+
+    fragment TypeRef on __Type {
+      kind
+      name
+      ofType {
+        ...TypeRef
       }
     }
 """
@@ -110,6 +140,10 @@ class IntrospectionService(
         val queryFields = queryType.fields?.mapNotNull { it.name } ?: emptyList()
         val mutationType = schema.mutationType
         val mutationFields = mutationType?.fields?.mapNotNull { it.name } ?: emptyList()
+        val typeDefinitions = schema.types
+            ?.mapNotNull { type -> type.toDefinition() }
+            ?.associateBy { definition -> definition.name }
+            ?: emptyMap()
 
         return UpstreamSchema(
             service = upstream,
@@ -117,6 +151,7 @@ class IntrospectionService(
             queryFieldNames = queryFields,
             mutationTypeName = mutationType?.name,
             mutationFieldNames = mutationFields,
+            typeDefinitions = typeDefinitions,
         )
     }
 }
@@ -140,7 +175,42 @@ data class UpstreamSchema(
     val queryFieldNames: List<String>,
     val mutationTypeName: String?,
     val mutationFieldNames: List<String>,
+    val typeDefinitions: Map<String, GraphQLTypeDefinition> = emptyMap(),
 )
+
+private fun IntrospectionType.toDefinition(): GraphQLTypeDefinition? {
+    val typeName = name ?: return null
+    val kindEnum = kind.toTypeKind() ?: return null
+    val fieldDefinitions = fields?.mapNotNull { field -> field.toDefinition() } ?: emptyList()
+    val inputDefinitions = inputFields?.mapNotNull { input -> input.toDefinition() } ?: emptyList()
+    return GraphQLTypeDefinition(typeName, kindEnum, fieldDefinitions, inputDefinitions)
+}
+
+private fun IntrospectionField.toDefinition(): GraphQLFieldDefinition? {
+    val fieldName = name ?: return null
+    val typeRef = type?.toTypeRef() ?: return null
+    val argumentDefinitions = args?.mapNotNull { arg -> arg.toDefinition() } ?: emptyList()
+    return GraphQLFieldDefinition(fieldName, typeRef, argumentDefinitions)
+}
+
+private fun IntrospectionInputValue.toDefinition(): GraphQLInputValueDefinition? {
+    val inputName = name ?: return null
+    val typeRef = type?.toTypeRef() ?: return null
+    return GraphQLInputValueDefinition(inputName, typeRef)
+}
+
+private fun IntrospectionTypeRef.toTypeRef(): GraphQLTypeRef? {
+    val kindEnum = kind.toTypeKind() ?: return null
+    val nested = ofType?.toTypeRef()
+    return GraphQLTypeRef(kindEnum, name, nested)
+}
+
+private fun String?.toTypeKind(): GraphQLTypeKind? {
+    if (this == null) {
+        return null
+    }
+    return runCatching { GraphQLTypeKind.valueOf(this) }.getOrNull()
+}
 
 private data class IntrospectionHttpResponse @JsonCreator constructor(
     @JsonProperty("data") val data: IntrospectionData?,
@@ -158,6 +228,7 @@ private data class IntrospectionData @JsonCreator constructor(
 private data class IntrospectionSchema @JsonCreator constructor(
     @JsonProperty("queryType") val queryType: IntrospectionRootType?,
     @JsonProperty("mutationType") val mutationType: IntrospectionRootType?,
+    @JsonProperty("types") val types: List<IntrospectionType>?,
 )
 
 private data class IntrospectionRootType @JsonCreator constructor(
@@ -167,4 +238,24 @@ private data class IntrospectionRootType @JsonCreator constructor(
 
 private data class IntrospectionField @JsonCreator constructor(
     @JsonProperty("name") val name: String?,
+    @JsonProperty("type") val type: IntrospectionTypeRef?,
+    @JsonProperty("args") val args: List<IntrospectionInputValue>?,
+)
+
+private data class IntrospectionInputValue @JsonCreator constructor(
+    @JsonProperty("name") val name: String?,
+    @JsonProperty("type") val type: IntrospectionTypeRef?,
+)
+
+private data class IntrospectionType @JsonCreator constructor(
+    @JsonProperty("kind") val kind: String?,
+    @JsonProperty("name") val name: String?,
+    @JsonProperty("fields") val fields: List<IntrospectionField>?,
+    @JsonProperty("inputFields") val inputFields: List<IntrospectionInputValue>?,
+)
+
+private data class IntrospectionTypeRef @JsonCreator constructor(
+    @JsonProperty("kind") val kind: String?,
+    @JsonProperty("name") val name: String?,
+    @JsonProperty("ofType") val ofType: IntrospectionTypeRef?,
 )
