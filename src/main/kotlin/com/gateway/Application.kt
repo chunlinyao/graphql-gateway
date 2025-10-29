@@ -33,7 +33,24 @@ fun main() {
     }
 
     val introspectionService = IntrospectionService()
-    val upstreamSchemas = introspectionService.introspectAll(upstreams)
+    val introspectionResult = introspectionService.introspectAll(upstreams)
+
+    if (introspectionResult.hasFailures) {
+        introspectionResult.failures.forEach { failure ->
+            logger.warn(
+                "Skipping upstream service due to introspection failure: name={}, url={}, reason={}",
+                failure.service.name,
+                failure.service.url,
+                failure.reason,
+            )
+        }
+    }
+
+    val upstreamSchemas = introspectionResult.schemas
+
+    if (upstreamSchemas.isEmpty()) {
+        logger.warn("No upstream schemas available after introspection; gateway will expose only health endpoints")
+    }
 
     logger.info("Starting GraphQL gateway on port {} using Ktor(Netty) + graphql-java stack", port)
 
@@ -64,8 +81,18 @@ fun Application.gatewayModule(
 @Suppress("unused")
 fun Application.gatewayModule() {
     val upstreams = UpstreamConfigLoader().load()
-    val schemas = IntrospectionService().introspectAll(upstreams)
-    gatewayModule(upstreams, schemas)
+    val result = IntrospectionService().introspectAll(upstreams)
+    if (result.hasFailures) {
+        result.failures.forEach { failure ->
+            environment.log.warn(
+                "Skipping upstream service due to introspection failure: name={}, url={}, reason={}",
+                failure.service.name,
+                failure.service.url,
+                failure.reason,
+            )
+        }
+    }
+    gatewayModule(upstreams, result.schemas)
 }
 
 val UPSTREAMS_KEY: AttributeKey<List<UpstreamService>> = AttributeKey("gateway.upstreams")

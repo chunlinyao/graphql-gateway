@@ -79,4 +79,21 @@ class IntrospectionServiceTest {
             assertTrue(exception.message?.contains("Not authorized") == true)
         }
     }
+
+    @Test
+    fun `introspectAll collects failures without throwing`() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(500))
+            server.start()
+
+            val upstream = UpstreamService("Broken", server.url("/graphql").toString(), 0)
+
+            val result = service.introspectAll(listOf(upstream))
+
+            assertTrue(result.schemas.isEmpty())
+            assertEquals(1, result.failures.size)
+            assertEquals("Broken", result.failures.first().service.name)
+            assertTrue(result.failures.first().reason.isNotBlank())
+        }
+    }
 }

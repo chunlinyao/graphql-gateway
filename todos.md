@@ -109,6 +109,7 @@
     - 需要透传哪些请求头？（Authorization等）
   - Next Role: Reviewer — 请确认 introspection 响应解析与错误处理覆盖验收标准。
   - Notes/Follow-ups:
+    - 2024-05-19 codex：若单个上游 introspection 失败会记录日志并跳过该服务，网关仍可启动；需在后续路由逻辑中考虑缺失服务的提示能力。
 
 ---
 
