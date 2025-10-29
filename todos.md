@@ -10,7 +10,7 @@
 
 ## M0. 初始化项目骨架
 
-- [ ] M0.1 建立基础工程与运行入口 (status: review)
+- [ ] M0.1 建立基础工程与运行入口 (status: done)
   - Owner: codex @ 2024-05-19 00:00 UTC
   - Context:
     - **Implementation stack**: Kotlin + Ktor(Netty) + graphql-java on JVM 21 (per maintainer directive; previous Node.js scaffolding replaced).
