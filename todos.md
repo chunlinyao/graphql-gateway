@@ -212,8 +212,8 @@
 
 ## M4. 处理 introspection 和导出公共 schema
 
-- [ ] M4.1 `/schema` 端点 (status: todo)
-  - Owner:
+- [ ] M4.1 `/schema` 端点 (status: review)
+  - Owner: codex @ 2025-10-29 08:30 UTC
   - Context:
     - 网关要提供一个 HTTP GET `/schema`，返回合并后的 SDL。
     - 方便其他服务或前端生成类型。
@@ -222,15 +222,20 @@
   - Steps/Plan:
     - 把 M3.3 产出的合并 SDL 暴露给 HTTP 层。
   - What Changed:
+    - `Application.kt` 新增 `/schema` 路由，直接返回组合后的 SDL 文本并设置 `text/plain` 响应。
+    - 增加 `ApplicationSchemaEndpointTest` 覆盖 GET `/schema` 行为，验证状态码、Content-Type 与内容。
+    - 构建脚本引入 `ktor-server-test-host` 依赖以支持路由测试。
   - How to Run/Test:
-    - 启动后 `curl GET /schema` 能看到 SDL。
+    - `./gradlew test`
+    - `./gradlew run` 后执行 `curl -i http://localhost:4000/schema` 验证 200 与 SDL 输出。
   - Known Limits:
+    - 若上游 introspection 失败导致合并 SDL 为空，接口仍返回空字符串；后续可结合就绪探针强化校验。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认 `/schema` 输出格式与测试覆盖符合验收标准。
   - Notes/Follow-ups:
 
-- [ ] M4.2 introspection 查询走本地 (status: todo)
-  - Owner:
+- [ ] M4.2 introspection 查询走本地 (status: review)
+  - Owner: codex @ 2025-10-29 09:40 UTC
   - Context:
     - 客户端会发 GraphQL introspection 查询（`__schema`, `__type`）。
     - 对这种请求，网关不应该往后端打请求，而是用合并后的公共 schema 来回答。
@@ -242,11 +247,18 @@
     - 检测“是否是纯 introspection”。
     - 构造 introspection 响应：可用本地的合并 schema 结构来回答。
   - What Changed:
+    - 新增 `GatewayGraphQLFactory` 以基于合并 SDL 构建 GraphQL Java 实例，用于回答本地 introspection 查询。
+    - 新增 `IntrospectionQueryDetector` 判断请求是否仅包含 `__schema`/`__type` 等 introspection 字段。
+    - `POST /graphql` 路由支持 introspection：本地执行并返回结果，非 introspection 请求暂返回 501。
+    - 增加 `ApplicationGraphQLIntrospectionTest` 验证 introspection 与非 introspection 请求的行为。
   - How to Run/Test:
-    - `POST /graphql` with `{ query: "{ __schema { types { name } } }" }` 返回 200 并包含类型列表。
+    - `./gradlew test`
+    - `curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' -d '{"query":"{ __schema { queryType { name } } }"}'`
   - Known Limits:
+    - 若合并 SDL 为空或无法被 GraphQL Java 解析，将返回 503，后续可改进以生成最小可用 schema。
+    - 非 introspection 请求仍未实现路由（返回 501），待 M5 系列任务处理。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 请确认 introspection 检测逻辑、GraphQL 执行器构造与 HTTP 行为符合验收标准。
   - Notes/Follow-ups:
 
 ---
@@ -279,12 +291,12 @@
   - Next Role:
   - Notes/Follow-ups:
 
-- [ ] M5.2 将请求转发到后端并回传结果 (status: todo)
-  - Owner:
+- [ ] M5.2 将请求转发到后端并回传结果 (status: review)
+  - Owner: codex @ 2024-05-20 00:00 UTC
   - Context:
-    - 一旦确定目标后端，就把原始 GraphQL 请求（query / variables / operationName）POST 给后端。
-    - 把后端返回的 JSON 原样返回给调用方。
-    - 同时需要把必要的 header 透传（比如 Authorization）。
+    - 新增路由器根据合并 schema 的路由表确定 GraphQL 查询目标 upstream，并在 Ktor handler 中调用。
+    - 使用 Java HttpClient 将 query/operationName/variables 转发给对应 upstream，并透传 Authorization 头。
+    - 针对无法解析或跨服务查询的场景返回 400，无法访问 upstream 返回 502。
   - Acceptance:
     - `POST /graphql`（普通业务查询）会被代理到正确的后端 URL。
     - 客户端拿到结果等同于直接打那个后端。
@@ -295,13 +307,17 @@
     - 用这个响应体直接作为网关响应（状态固定返回 200，可以保留 GraphQL `errors` 结构）。
     - 至少透传 Authorization 头。
   - What Changed:
+    - 新增 `GraphQLRequestRouter`、`GraphQLRequestForwarder` 组件用于解析 operation、校验跨服务访问并执行 HTTP 转发。
+    - `/graphql` handler 支持业务查询：先做本地 introspection，再路由到单一 upstream；失败时返回 400/502。
+    - 补充端到端测试覆盖成功转发、Authorization 透传和跨服务查询被拒绝的场景；更新 introspection 测试期望。
   - How to Run/Test:
-    - 构造一个真实后端可执行的 query。
-    - 用 curl POST 到网关 `/graphql`，观察是否拿到后端的真实数据。
+    - `./gradlew test`
+    - 或启动网关：`./gradlew run` 后 `curl -X POST -H 'Content-Type: application/json' --data '{"query":"{ students { id } }"}' http://localhost:4000/graphql`
   - Known Limits:
-    - 暂不支持同一请求内拆分并并发打多个后端。
+    - 暂不支持单次请求拆分访问多个 upstream；遇到跨服务字段会返回 400。
+    - 当前仅透传 Authorization 头，其他自定义头若需支持需后续扩展。
   - Open Questions:
-  - Next Role:
+  - Next Role: Reviewer — 核对转发逻辑、错误处理与测试覆盖。
   - Notes/Follow-ups:
 
 ---
