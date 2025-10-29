@@ -39,17 +39,36 @@ class IntrospectionService(
         .build(),
 ) {
 
-    fun introspectAll(upstreams: List<UpstreamService>): List<UpstreamSchema> {
-        return upstreams.map { upstream ->
-            val schema = introspect(upstream)
-            logger.info(
-                "Upstream introspection: service={}, queryType={}, fields={}",
-                upstream.name,
-                schema.queryTypeName,
-                schema.queryFieldNames.joinToString(","),
-            )
-            schema
+    fun introspectAll(upstreams: List<UpstreamService>): IntrospectionBatchResult {
+        val successful = mutableListOf<UpstreamSchema>()
+        val failures = mutableListOf<IntrospectionFailure>()
+
+        upstreams.forEach { upstream ->
+            try {
+                val schema = introspect(upstream)
+                logger.info(
+                    "Upstream introspection: service={}, queryType={}, fields={}",
+                    upstream.name,
+                    schema.queryTypeName,
+                    schema.queryFieldNames.joinToString(","),
+                )
+                successful += schema
+            } catch (ex: Exception) {
+                logger.warn(
+                    "Failed to introspect upstream service: name={}, url={}, reason={}",
+                    upstream.name,
+                    upstream.url,
+                    ex.message ?: ex.javaClass.simpleName,
+                    ex,
+                )
+                failures += IntrospectionFailure(
+                    service = upstream,
+                    reason = ex.message ?: ex.javaClass.simpleName,
+                )
+            }
         }
+
+        return IntrospectionBatchResult(successful, failures)
     }
 
     fun introspect(upstream: UpstreamService): UpstreamSchema {
@@ -89,6 +108,19 @@ class IntrospectionService(
         )
     }
 }
+
+data class IntrospectionBatchResult(
+    val schemas: List<UpstreamSchema>,
+    val failures: List<IntrospectionFailure>,
+) {
+    val hasFailures: Boolean
+        get() = failures.isNotEmpty()
+}
+
+data class IntrospectionFailure(
+    val service: UpstreamService,
+    val reason: String,
+)
 
 data class UpstreamSchema(
     val service: UpstreamService,
