@@ -329,7 +329,7 @@
 
 ## M6. 健康检查与观测
 
-- [ ] M6.1 健康/就绪探针 (status: review)
+- [ ] M6.1 健康/就绪探针 (status: done)
   - Owner: codex @ 2025-10-30 00:00 UTC
   - Context:
     - 运维需要判断网关是否已成功完成 schema 聚合并可接受流量。
