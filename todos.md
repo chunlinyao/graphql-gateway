@@ -1,0 +1,354 @@
+下面是建议提交为 `todos.md` 的内容。它已经拆成一系列可以依次完成的任务（M0→M8），每条任务都按我们在 `agents.md` 里定义的任务模板写好信息槽位，codex 只需要把状态从 `todo` 往后推，并在推进时不断填充字段。
+
+````markdown
+# todos.md
+本文件是 codex 的任务列表与进度跟踪。  
+状态字段可取：`todo | in-progress | review | done | blocked`  
+当任务推进时，请在该任务下更新 Owner / 时间 / 运行方式 / Known Limits 等信息。
+
+---
+
+## M0. 初始化项目骨架
+
+- [ ] M0.1 建立基础工程与运行入口 (status: todo)
+  - Owner:
+  - Context:
+    - 需要一个可以启动的空网关进程，后续所有功能都会挂在这个进程里。
+  - Acceptance:
+    - 可以本地启动一个进程（任意语言运行时皆可）。
+    - 进程监听一个 HTTP 端口（固定值或配置都行）。
+    - 提供 `/healthz` GET 返回 200/OK（纯本地，不依赖后端）。
+  - Steps/Plan:
+    - 建项目。
+    - 建 main/entry。
+    - 建 HTTP server。
+    - 加 `/healthz`。
+  - What Changed:
+  - How to Run/Test:
+    - 启动命令:
+    - 访问:
+      - `GET /healthz` → 200
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M1. 读取后端服务配置
+
+- [ ] M1.1 支持从配置文件读取上游服务清单 (status: todo)
+  - Owner:
+  - Context:
+    - 网关需要知道有哪些后端 GraphQL 服务（URL、名称、优先级）。
+    - 这些信息后续会被 introspection / 合并 / 路由使用。
+  - Acceptance:
+    - 存在一个配置文件（例如 `config/upstreams.yaml` 或等价物）。
+    - 代码能够读取并解析这个文件，得到一组服务对象：
+      - `name`（字符串）
+      - `url`（GraphQL endpoint 的 HTTP 地址）
+      - `priority`（整数，越小越优先）
+    - 读取结果在启动日志中可见。
+  - Steps/Plan:
+    - 定义配置文件格式并加示例。
+    - 编写加载函数。
+    - 启动时读取并打印解析出的服务列表。
+  - What Changed:
+  - How to Run/Test:
+    - 启动网关并确认日志里打印出各 upstream。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M2. 对每个后端做 GraphQL introspection
+
+- [ ] M2.1 实现 introspection 抓取逻辑 (status: todo)
+  - Owner:
+  - Context:
+    - 网关启动时需要拉取每个后端的 GraphQL schema。
+    - 使用标准 GraphQL introspection 查询（`__schema`, `__type` 等）。
+  - Acceptance:
+    - 启动时，对每个后端发出 introspection 请求（POST JSON `{query: "...__schema..."}`）。
+    - 能把 introspection 的返回解析成一个可操作的 schema 描述（记住：不限制具体库实现方式，但后面需要能遍历类型/字段）。
+    - 失败时应让网关启动直接报错或标记为 blocked（不要悄悄忽略）。
+  - Steps/Plan:
+    - 准备 introspection 查询常量。
+    - 实现 HTTP POST 调用下游。
+    - 解析结果为本地结构。
+  - What Changed:
+  - How to Run/Test:
+    - 启动网关。
+    - 在日志中打印每个后端的 Query 根字段列表（顶层 query 字段名）。
+  - Known Limits:
+  - Open Questions:
+    - 需要透传哪些请求头？（Authorization等）
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M3. 合并多份 schema，生成“公共网关 schema”和路由表
+
+- [ ] M3.1 生成公共查询/变更根 (status: todo)
+  - Owner:
+  - Context:
+    - 多个后端可能都有同名的顶层 Query 字段或 Mutation 字段。
+    - 我们只允许一个赢家：优先级数字小的服务胜出。
+    - 需要记录“哪个字段归哪个后端”。
+  - Acceptance:
+    - 产出一个“合并后可公开的”根级 Query 定义和（如果有）Mutation 定义。
+    - 为每个保留的顶层字段，记录路由表：
+      - 例：`routing["getStudent"] = { serviceName: "Students", serviceUrl: "..." }`
+    - 冲突字段按优先级决定胜者，劣势后端的同名字段被丢弃。
+  - Steps/Plan:
+    - 遍历每个后端 introspection 结果。
+    - 按 priority 排序。
+    - 构建新的公共 Query/Mutation 字段列表和 routing。
+  - What Changed:
+  - How to Run/Test:
+    - 启动后打印路由表示例：
+      - `getStudent -> Students(...)`
+      - `getLedgerInfo -> Ledgers(...)`
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+- [ ] M3.2 合并普通类型（非 Query/Mutation） (status: todo)
+  - Owner:
+  - Context:
+    - 不同后端可能声明了同名类型（例如 StudentInfoType）。
+    - 字段集合可能不同，甚至冲突。
+    - 我们的规则：
+      - 如果类型同名，合并字段；
+      - 字段冲突时，优先级高的后端版本胜出；
+      - 字段不冲突时，全部保留。
+    - 这是为了让客户端看到一个统一的公共类型定义。
+  - Acceptance:
+    - 能遍历所有后端的类型定义。
+    - 产出一张合并后的类型表（无需马上执行这些字段，只是描述它们）。
+    - 对冲突字段，能在日志里说明“X 服务覆盖了 Y 服务的字段 Z”。
+  - Steps/Plan:
+    - 建类型名 -> {owner优先级, 字段列表} 的累积结构。
+    - 逐个后端按优先级merge。
+  - What Changed:
+  - How to Run/Test:
+    - 打印其中一个合并后的类型定义，确认字段合并符合优先级规则。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+- [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: todo)
+  - Owner:
+  - Context:
+    - 我们需要把合并后的 schema 输出为 SDL（文本 GraphQL schema），供：
+      - introspection 回答
+      - `/schema` 导出
+      - 下游客户端代码生成
+    - 同时可以裁剪掉不可达类型（即没有被任何公开的顶层字段、或其子树引用到的类型）。
+  - Acceptance:
+    - 启动后能拿到一个字符串 `mergedSDL`。
+    - `mergedSDL` 里包含最终的 Query/Mutation、以及被引用到的类型。
+    - 可在日志中输出前几行 SDL 作为验证。
+  - Steps/Plan:
+    - 根据合并结果构造一份内存中的“最终 schema 表示”。
+    - 打印成 SDL 字符串。
+    - 从公开 root 字段向下做引用追踪，把无引用的类型剔除。
+  - What Changed:
+  - How to Run/Test:
+    - 启动后有 debug 日志显示合并出的 SDL 片段。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M4. 处理 introspection 和导出公共 schema
+
+- [ ] M4.1 `/schema` 端点 (status: todo)
+  - Owner:
+  - Context:
+    - 网关要提供一个 HTTP GET `/schema`，返回合并后的 SDL。
+    - 方便其他服务或前端生成类型。
+  - Acceptance:
+    - GET `/schema` 返回 200，Content-Type `text/plain`，body 是当前合并SDL的完整文本。
+  - Steps/Plan:
+    - 把 M3.3 产出的合并 SDL 暴露给 HTTP 层。
+  - What Changed:
+  - How to Run/Test:
+    - 启动后 `curl GET /schema` 能看到 SDL。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+- [ ] M4.2 introspection 查询走本地 (status: todo)
+  - Owner:
+  - Context:
+    - 客户端会发 GraphQL introspection 查询（`__schema`, `__type`）。
+    - 对这种请求，网关不应该往后端打请求，而是用合并后的公共 schema 来回答。
+  - Acceptance:
+    - 在 `POST /graphql` 时，如果请求只包含 introspection 字段：
+      - 返回本地生成的 introspection 结果。
+    - 非 introspection 则继续正常路由（后面 M5）。
+  - Steps/Plan:
+    - 检测“是否是纯 introspection”。
+    - 构造 introspection 响应：可用本地的合并 schema 结构来回答。
+  - What Changed:
+  - How to Run/Test:
+    - `POST /graphql` with `{ query: "{ __schema { types { name } } }" }` 返回 200 并包含类型列表。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M5. 业务查询路由 (/graphql 正常请求)
+
+- [ ] M5.1 提取请求的顶层字段并决定路由 (status: todo)
+  - Owner:
+  - Context:
+    - 对普通查询或变更，规则是：同一个 GraphQL operation 的所有顶层字段必须属于同一个后端。
+    - 我们需要从请求 AST 拿到这些字段名，并根据 M3 的路由表决定目标后端。
+  - Acceptance:
+    - 对任意 `POST /graphql` 请求：
+      - 网关能解析 GraphQL 文本，找到 operation 的顶层字段集合。
+      - 如果这些字段都由同一后端拥有，路由目标=那个后端。
+      - 如果不是同一个后端，返回错误（400 + GraphQL-style error JSON）。
+  - Steps/Plan:
+    - 解析 GraphQL 文本成 AST。
+    - 根据路由表检查 owner 是否一致。
+    - 如果不一致，构建错误响应：
+      ```json
+      { "errors": [ { "message": "Fields belong to different upstreams, split the request" } ] }
+      ```
+  - What Changed:
+  - How to Run/Test:
+    - 发送一个只包含单一后端字段的查询 → 应通过路由检查。
+    - 发送一个跨后端字段的查询 → 返回 400。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+- [ ] M5.2 将请求转发到后端并回传结果 (status: todo)
+  - Owner:
+  - Context:
+    - 一旦确定目标后端，就把原始 GraphQL 请求（query / variables / operationName）POST 给后端。
+    - 把后端返回的 JSON 原样返回给调用方。
+    - 同时需要把必要的 header 透传（比如 Authorization）。
+  - Acceptance:
+    - `POST /graphql`（普通业务查询）会被代理到正确的后端 URL。
+    - 客户端拿到结果等同于直接打那个后端。
+  - Steps/Plan:
+    - 根据路由表拿到后端 URL。
+    - 复制入站请求的 body JSON，POST 给后端。
+    - 拿回响应体（JSON 字符串）和状态码。
+    - 用这个响应体直接作为网关响应（状态固定返回 200，可以保留 GraphQL `errors` 结构）。
+    - 至少透传 Authorization 头。
+  - What Changed:
+  - How to Run/Test:
+    - 构造一个真实后端可执行的 query。
+    - 用 curl POST 到网关 `/graphql`，观察是否拿到后端的真实数据。
+  - Known Limits:
+    - 暂不支持同一请求内拆分并并发打多个后端。
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M6. 健康检查与观测
+
+- [ ] M6.1 健康/就绪探针 (status: todo)
+  - Owner:
+  - Context:
+    - 运维需要判断网关是否已成功完成 schema 聚合并可接受流量。
+  - Acceptance:
+    - `GET /healthz` → 返回 200 以及简单 JSON，比如 `{ "status": "ok" }`。
+    - `GET /readyz` → 只有在所有后端 introspection 成功 + 合并完成后才返回 200，否则返回 500/503。
+  - Steps/Plan:
+    - 启动完成后将某个全局 flag 设为 ready。
+    - `/readyz` 根据该 flag 决定响应。
+  - What Changed:
+  - How to Run/Test:
+    - 启动成功后，访问 `/readyz` 返回 200。
+    - 模拟 introspection 失败场景（可临时注释/伪造），应返回非 200。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M7. 打包与容器化
+
+- [ ] M7.1 生成可部署工件 (status: todo)
+  - Owner:
+  - Context:
+    - 需要编译出一个单文件可运行的产物（例如 fat jar / 单一二进制等）。
+    - 容器镜像应能运行该产物并加载配置文件。
+  - Acceptance:
+    - 提供构建脚本或命令（例如 `build.sh` 或 `gradle shadowJar`）输出单体可运行工件。
+    - 提供 Dockerfile:
+      - 拷贝该工件
+      - 拷贝 `config/upstreams.yaml`
+      - 暴露端口
+      - ENTRYPOINT 直接运行网关并指定配置路径
+    - 提供示例 docker-compose.yml（可选），展示网关+后端服务同网络下的场景。
+  - Steps/Plan:
+    - 编写打包命令。
+    - 编写 Dockerfile。
+    - 本地 `docker run` 后能访问 `/healthz`、`/schema`、`/graphql`（后端允许的情况下）。
+  - What Changed:
+  - How to Run/Test:
+    - `docker build ...`
+    - `docker run -p 4000:4000 ...`
+    - curl 验证接口。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+## M8. 文档化 / 后续工作
+
+- [ ] M8.1 使用说明文档 (status: todo)
+  - Owner:
+  - Context:
+    - 需要为后续接手的人说明本网关的行为约束：
+      - 一个请求只能路由到一个后端
+      - 冲突字段按优先级决策
+      - `/schema` 是合并后的公开视图
+      - introspection 在网关本地回答
+  - Acceptance:
+    - 在仓库添加文档（README 或 docs/usage.md）：
+      - 如何启动
+      - 如何配置 upstreams
+      - 限制/已知不支持的模式（多后端拼接）
+      - 典型错误响应示例
+    - 文档必须和现状一致。
+  - Steps/Plan:
+    - 写明端口、接口、约束。
+    - 写明如何新增/修改一个后端（改配置文件 + 重启）。
+  - What Changed:
+  - How to Run/Test:
+    - 文档应可以让一个新人照着跑起来并打出一个成功的查询。
+  - Known Limits:
+  - Open Questions:
+  - Next Role:
+  - Notes/Follow-ups:
+
+---
+
+### 备注
+- codex 在推进任务时，要更新对应任务块的状态、Owner、时间戳、What Changed、How to Run/Test 等字段。
+- 如果某个任务需要拆分出更多子任务（例如 M3.2 太大），请复制模板块并放到该任务下方，保持同样字段。
+````
