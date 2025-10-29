@@ -150,7 +150,7 @@
     - Reviewer — 请确认合并策略、日志输出与单元测试覆盖验收标准。
   - Notes/Follow-ups:
 
-- [ ] M3.2 合并普通类型（非 Query/Mutation） (status: review)
+- [ ] M3.2 合并普通类型（非 Query/Mutation） (status: done)
   - Owner: codex @ 2025-10-29 06:37 UTC
   - Context:
     - 不同后端可能声明了同名类型（例如 StudentInfoType）。
@@ -181,7 +181,7 @@
     - Reviewer — 请确认类型合并策略、日志输出与测试覆盖验收标准。
   - Notes/Follow-ups:
 
-- [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: review)
+- [ ] M3.3 生成最终可发布的 SDL + 可达性裁剪 (status: done)
   - Owner: codex @ 2025-10-29 07:45 UTC
   - Context:
     - Root schema 合并后需要将 Query/Mutation 和普通类型转成 SDL 供 `/schema` 等端点复用。
