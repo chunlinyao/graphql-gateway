@@ -45,7 +45,7 @@
 
 ## M1. 读取后端服务配置
 
-- [ ] M1.1 支持从配置文件读取上游服务清单 (status: review)
+- [ ] M1.1 支持从配置文件读取上游服务清单 (status: done)
   - Owner: codex @ 2024-05-19 01:00 UTC
   - Context:
     - 网关需要知道有哪些后端 GraphQL 服务（URL、名称、优先级）。
@@ -82,7 +82,7 @@
 
 ## M2. 对每个后端做 GraphQL introspection
 
-- [ ] M2.1 实现 introspection 抓取逻辑 (status: review)
+- [ ] M2.1 实现 introspection 抓取逻辑 (status: done)
   - Owner: codex @ 2024-05-19 02:30 UTC
   - Context:
     - 网关启动时需要拉取每个后端的 GraphQL schema。
