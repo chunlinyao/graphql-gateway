@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  gateway:
+    build: .
+    image: graphql-gateway:local
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - UPSTREAMS_CONFIG=/app/config/upstreams.yaml
+    volumes:
+      - ./config/upstreams.yaml:/app/config/upstreams.yaml:ro
