@@ -6,7 +6,9 @@ import com.gateway.introspection.IntrospectionService
 import com.gateway.introspection.UpstreamSchema
 import com.gateway.schema.GatewayRootSchema
 import com.gateway.schema.GatewayTypeRegistry
+import com.gateway.schema.ComposedSchema
 import com.gateway.schema.RootSchemaMerger
+import com.gateway.schema.SchemaComposer
 import com.gateway.schema.TypeMerger
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.jackson.jackson
@@ -58,6 +60,7 @@ fun main() {
 
     val rootSchema = RootSchemaMerger().merge(upstreamSchemas)
     val typeRegistry = TypeMerger().merge(upstreamSchemas)
+    val composedSchema = SchemaComposer().compose(rootSchema, typeRegistry)
 
     if (rootSchema.query.fields.isNotEmpty()) {
         logger.info("Gateway query routing table:")
@@ -104,10 +107,12 @@ fun main() {
         }
     }
 
+    logger.info("Generated merged schema SDL preview:\n{}", composedSchema.sdl.lines().take(20).joinToString("\n"))
+
     logger.info("Starting GraphQL gateway on port {} using Ktor(Netty) + graphql-java stack", port)
 
     embeddedServer(Netty, port = port) {
-        gatewayModule(upstreams, upstreamSchemas, rootSchema, typeRegistry)
+        gatewayModule(upstreams, upstreamSchemas, rootSchema, typeRegistry, composedSchema)
     }.start(wait = true)
 }
 
@@ -117,11 +122,13 @@ fun Application.gatewayModule(
     schemas: List<UpstreamSchema>,
     rootSchema: GatewayRootSchema,
     typeRegistry: GatewayTypeRegistry,
+    composedSchema: ComposedSchema,
 ) {
     attributes.put(UPSTREAMS_KEY, upstreams)
     attributes.put(UPSTREAM_SCHEMAS_KEY, schemas)
     attributes.put(GATEWAY_ROOT_SCHEMA_KEY, rootSchema)
     attributes.put(GATEWAY_TYPE_REGISTRY_KEY, typeRegistry)
+    attributes.put(GATEWAY_MERGED_SDL_KEY, composedSchema.sdl)
 
     install(ContentNegotiation) {
         jackson()
@@ -150,10 +157,12 @@ fun Application.gatewayModule() {
     }
     val rootSchema = RootSchemaMerger().merge(result.schemas)
     val typeRegistry = TypeMerger().merge(result.schemas)
-    gatewayModule(upstreams, result.schemas, rootSchema, typeRegistry)
+    val composedSchema = SchemaComposer().compose(rootSchema, typeRegistry)
+    gatewayModule(upstreams, result.schemas, rootSchema, typeRegistry, composedSchema)
 }
 
 val UPSTREAMS_KEY: AttributeKey<List<UpstreamService>> = AttributeKey("gateway.upstreams")
 val UPSTREAM_SCHEMAS_KEY: AttributeKey<List<UpstreamSchema>> = AttributeKey("gateway.upstream.schemas")
 val GATEWAY_ROOT_SCHEMA_KEY: AttributeKey<GatewayRootSchema> = AttributeKey("gateway.root.schema")
 val GATEWAY_TYPE_REGISTRY_KEY: AttributeKey<GatewayTypeRegistry> = AttributeKey("gateway.types.registry")
+val GATEWAY_MERGED_SDL_KEY: AttributeKey<String> = AttributeKey("gateway.merged.sdl")

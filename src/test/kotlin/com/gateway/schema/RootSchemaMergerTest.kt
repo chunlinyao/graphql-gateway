@@ -1,6 +1,10 @@
 package com.gateway.schema
 
 import com.gateway.config.UpstreamService
+import com.gateway.introspection.GraphQLFieldDefinition
+import com.gateway.introspection.GraphQLTypeDefinition
+import com.gateway.introspection.GraphQLTypeKind
+import com.gateway.introspection.GraphQLTypeRef
 import com.gateway.introspection.UpstreamSchema
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,6 +27,15 @@ class RootSchemaMergerTest {
                 queryFieldNames = listOf("student", "payment"),
                 mutationTypeName = "Mutation",
                 mutationFieldNames = listOf("createPayment"),
+                typeDefinitions = mapOf(
+                    "Query" to queryType(
+                        field("student"),
+                        field("payment"),
+                    ),
+                    "Mutation" to mutationType(
+                        field("createPayment"),
+                    ),
+                ),
             ),
             UpstreamSchema(
                 service = highPriority,
@@ -30,6 +43,15 @@ class RootSchemaMergerTest {
                 queryFieldNames = listOf("student", "students"),
                 mutationTypeName = "Mutation",
                 mutationFieldNames = listOf("createStudent"),
+                typeDefinitions = mapOf(
+                    "Query" to queryType(
+                        field("student"),
+                        field("students"),
+                    ),
+                    "Mutation" to mutationType(
+                        field("createStudent"),
+                    ),
+                ),
             ),
         )
 
@@ -55,6 +77,9 @@ class RootSchemaMergerTest {
                 queryFieldNames = listOf("students"),
                 mutationTypeName = null,
                 mutationFieldNames = emptyList(),
+                typeDefinitions = mapOf(
+                    "Query" to queryType(field("students")),
+                ),
             ),
         )
 
@@ -66,3 +91,21 @@ class RootSchemaMergerTest {
         assertEquals(emptyMap(), merged.mutationRouting())
     }
 }
+
+private fun field(name: String): GraphQLFieldDefinition = GraphQLFieldDefinition(name, scalar("String"), emptyList())
+
+private fun queryType(vararg fields: GraphQLFieldDefinition): GraphQLTypeDefinition = GraphQLTypeDefinition(
+    name = "Query",
+    kind = GraphQLTypeKind.OBJECT,
+    fields = fields.toList(),
+    inputFields = emptyList(),
+)
+
+private fun mutationType(vararg fields: GraphQLFieldDefinition): GraphQLTypeDefinition = GraphQLTypeDefinition(
+    name = "Mutation",
+    kind = GraphQLTypeKind.OBJECT,
+    fields = fields.toList(),
+    inputFields = emptyList(),
+)
+
+private fun scalar(name: String): GraphQLTypeRef = GraphQLTypeRef(GraphQLTypeKind.SCALAR, name, null)
