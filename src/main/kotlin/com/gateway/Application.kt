@@ -115,7 +115,7 @@ fun main() {
             val arguments = if (field.arguments.isEmpty()) {
                 ""
             } else {
-                field.arguments.joinToString(", ") { arg -> "${'$'}{arg.name}: ${'$'}{arg.type.render()}" }
+                field.arguments.joinToString(", ") { "${'$'}{it.name}: ${'$'}{it.type.render()}" }
             }
             logger.info(
                 "  {}: {} (owner={}, args=[{}])",
