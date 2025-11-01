@@ -57,3 +57,21 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
 tasks.build {
     dependsOn(tasks.named("shadowJar"))
 }
+
+// Declare explicit dependencies for application plugin tasks that use shadowJar output
+tasks.named("distZip") {
+    dependsOn(tasks.named("shadowJar"))
+}
+
+tasks.named("distTar") {
+    dependsOn(tasks.named("shadowJar"))
+}
+
+tasks.named("startScripts") {
+    dependsOn(tasks.named("shadowJar"))
+}
+
+tasks.named("startShadowScripts") {
+    dependsOn(tasks.named("jar"))
+    dependsOn(tasks.named("shadowJar"))
+}
